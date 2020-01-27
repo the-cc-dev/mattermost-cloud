@@ -1,15 +1,35 @@
 package aws
 
 import (
+	"context"
 	"fmt"
+	"sync"
+	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/ec2"
 	"github.com/aws/aws-sdk-go/service/rds"
+	"github.com/mattermost/mattermost-cloud/model"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
+)
+
+const (
+	AuroraMySQLEngineName             = "aurora-mysql"
+	AuroraMySQLEngineVersion          = "5.7"
+	RDSCustomParamGroupName           = "replication-aurora-mysql57"
+	RDSDefaultInstanceClass           = "db.r5.large"
+	RDSDefaultEngineMode              = "provisioned"
+	RDSDefaultDatabaseName            = "mattermost"
+	RDSDefaultSnapshotType            = "manual"
+	RDSStatusAvailable                = "available"
+	RDSStatusDeleting                 = "deleting"
+	RDSStatusCreating                 = "creating"
+	RDSStatusModifying                = "modifying"
+	RDSDefaultMySQLPort               = 3306
+	RDSDefaultSnapshotCreationTimeout = 10
 )
 
 func (a *Client) rdsGetDBSecurityGroupIDs(vpcID string, logger log.FieldLogger) ([]string, error) {
@@ -111,18 +131,19 @@ func (a *Client) rdsEnsureDBClusterCreated(awsID, vpcID, username, password stri
 			aws.String("us-east-1b"),
 			aws.String("us-east-1c"),
 		},
-		BackupRetentionPeriod: aws.Int64(7),
-		DBClusterIdentifier:   aws.String(awsID),
-		DatabaseName:          aws.String("mattermost"),
-		EngineMode:            aws.String("provisioned"),
-		Engine:                aws.String("aurora-mysql"),
-		EngineVersion:         aws.String("5.7"),
-		MasterUserPassword:    aws.String(password),
-		MasterUsername:        aws.String(username),
-		Port:                  aws.Int64(3306),
-		StorageEncrypted:      aws.Bool(false),
-		DBSubnetGroupName:     aws.String(dbSubnetGroupName),
-		VpcSecurityGroupIds:   aws.StringSlice(dbSecurityGroupIDs),
+		BackupRetentionPeriod:       aws.Int64(7),
+		DBClusterIdentifier:         aws.String(awsID),
+		DatabaseName:                aws.String(RDSDefaultDatabaseName),
+		EngineMode:                  aws.String(RDSDefaultEngineMode),
+		Engine:                      aws.String(AuroraMySQLEngineName),
+		DBClusterParameterGroupName: aws.String(RDSCustomParamGroupName),
+		EngineVersion:               aws.String(AuroraMySQLEngineVersion),
+		MasterUserPassword:          aws.String(password),
+		MasterUsername:              aws.String(username),
+		Port:                        aws.Int64(RDSDefaultMySQLPort),
+		StorageEncrypted:            aws.Bool(false),
+		DBSubnetGroupName:           aws.String(dbSubnetGroupName),
+		VpcSecurityGroupIds:         aws.StringSlice(dbSecurityGroupIDs),
 	}
 
 	_, err = svc.CreateDBCluster(input)
@@ -136,6 +157,7 @@ func (a *Client) rdsEnsureDBClusterCreated(awsID, vpcID, username, password stri
 }
 
 func (a *Client) rdsEnsureDBClusterInstanceCreated(awsID, instanceName string, logger log.FieldLogger) error {
+	logger.Infof("Provisioning AWS RDS master instance with name %s", instanceName)
 	svc := rds.New(session.New(), &aws.Config{
 		Region: aws.String(DefaultAWSRegion),
 	})
@@ -152,8 +174,9 @@ func (a *Client) rdsEnsureDBClusterInstanceCreated(awsID, instanceName string, l
 	_, err = svc.CreateDBInstance(&rds.CreateDBInstanceInput{
 		DBClusterIdentifier:  aws.String(awsID),
 		DBInstanceIdentifier: aws.String(instanceName),
-		DBInstanceClass:      aws.String("db.r5.large"),
-		Engine:               aws.String("aurora-mysql"),
+		DBParameterGroupName: aws.String(RDSCustomParamGroupName),
+		DBInstanceClass:      aws.String(RDSDefaultInstanceClass),
+		Engine:               aws.String(AuroraMySQLEngineName),
 		PubliclyAccessible:   aws.Bool(false),
 	})
 	if err != nil {
@@ -184,7 +207,7 @@ func rdsGetDBCluster(awsID string, logger log.FieldLogger) (*rds.DBCluster, erro
 	return result.DBClusters[0], nil
 }
 
-func (a *Client) rdsEnsureDBClusterDeleted(awsID string, logger log.FieldLogger) error {
+func rdsGetClustersByID(awsID string) (*rds.RDS, *rds.DBCluster, error) {
 	svc := rds.New(session.New(), &aws.Config{
 		Region: aws.String(DefaultAWSRegion),
 	})
@@ -192,6 +215,19 @@ func (a *Client) rdsEnsureDBClusterDeleted(awsID string, logger log.FieldLogger)
 	result, err := svc.DescribeDBClusters(&rds.DescribeDBClustersInput{
 		DBClusterIdentifier: aws.String(awsID),
 	})
+	if err != nil {
+		return svc, nil, err
+	}
+
+	if len(result.DBClusters) != 1 {
+		return svc, nil, fmt.Errorf("expected 1 DB cluster, but got %d", len(result.DBClusters))
+	}
+
+	return svc, result.DBClusters[0], nil
+}
+
+func (a *Client) rdsEnsureDBClusterDeleted(awsID string, logger log.FieldLogger) error {
+	svc, cluster, err := rdsGetClustersByID(awsID)
 	if err != nil {
 		if aerr, ok := err.(awserr.Error); ok {
 			if aerr.Code() == rds.ErrCodeDBClusterNotFoundFault {
@@ -203,11 +239,7 @@ func (a *Client) rdsEnsureDBClusterDeleted(awsID string, logger log.FieldLogger)
 		return err
 	}
 
-	if len(result.DBClusters) != 1 {
-		return fmt.Errorf("expected 1 DB cluster, but got %d", len(result.DBClusters))
-	}
-
-	for _, instance := range result.DBClusters[0].DBClusterMembers {
+	for _, instance := range cluster.DBClusterMembers {
 		_, err = svc.DeleteDBInstance(&rds.DeleteDBInstanceInput{
 			DBInstanceIdentifier: instance.DBInstanceIdentifier,
 			SkipFinalSnapshot:    aws.Bool(true),
@@ -227,6 +259,122 @@ func (a *Client) rdsEnsureDBClusterDeleted(awsID string, logger log.FieldLogger)
 	}
 
 	logger.WithField("db-cluster-name", awsID).Debug("DBCluster deleted")
+
+	return nil
+}
+
+func (a *Client) createDBClusterSnapshot(ctx context.Context, awsID string, logger log.FieldLogger) (*rds.DBClusterSnapshot, error) {
+	svc := rds.New(session.New(), &aws.Config{
+		Region: aws.String(DefaultAWSRegion),
+	})
+
+	output, err := svc.CreateDBClusterSnapshotWithContext(ctx, &rds.CreateDBClusterSnapshotInput{
+		DBClusterIdentifier:         aws.String(awsID),
+		DBClusterSnapshotIdentifier: aws.String(fmt.Sprintf("%s-snapshot-%s", awsID, model.NewID())),
+	})
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to create a DB cluster snapshot for replication")
+	}
+
+	return output.DBClusterSnapshot, nil
+}
+
+// SnapshotStatusResult will signal when is done and it will contain either an error or the snapshot data.
+type SnapshotStatusResult struct {
+	snapshot *rds.DBClusterSnapshot
+	err      chan error
+	ok       chan struct{}
+	once     sync.Once
+}
+
+// Ok returns an read-only channel that will signal when the routine has finished.
+func (e *SnapshotStatusResult) Ok() <-chan struct{} {
+	return e.ok
+}
+
+// Err returns error if the routine failed, otherwise it returns nil.
+func (e *SnapshotStatusResult) Error() <-chan error {
+	return e.err
+}
+
+// Close closes done channel
+func (e *SnapshotStatusResult) close() {
+	e.once.Do(func() {
+		close(e.ok)
+	})
+}
+
+// ensureDBClusterSnapshotStatus periodically checks that a snapshot has reached a desirable state. Valid statuses: creating, available, deleting, modifying.
+func (a *Client) ensureDBClusterSnapshotStatus(ctx context.Context, snapshotID, snapshotStatus string, retryDelay time.Duration) *SnapshotStatusResult {
+	svc := rds.New(session.New(), &aws.Config{
+		Region: aws.String(DefaultAWSRegion),
+	})
+
+	result := SnapshotStatusResult{
+		ok: make(chan struct{}),
+	}
+
+	input := rds.DescribeDBClusterSnapshotsInput{
+		DBClusterSnapshotIdentifier: aws.String(snapshotID),
+	}
+
+	go func() {
+		for result.err == nil || result.snapshot == nil {
+			select {
+			case <-ctx.Done():
+				result.err <- errors.Wrapf(ctx.Err(), "cluster has not reached the desired snapshot status: %s", snapshotStatus)
+			default:
+				out, err := svc.DescribeDBClusterSnapshotsWithContext(ctx, &input)
+				if err != nil {
+					result.err <- errors.Wrapf(err, "cluster has not reached the desired snapshot status: %s", snapshotStatus)
+				}
+				if *out.DBClusterSnapshots[0].Status == snapshotStatus {
+					result.ok <- struct{}{}
+				}
+				<-time.After(retryDelay)
+			}
+		}
+	}()
+
+	return &result
+}
+
+// rdsEnsureDBClusterCreatedFromSnapshot requests RDS to restore a DB cluster from an specific snapshot
+func (a *Client) rdsEnsureDBClusterCreatedFromSnapshot(vpcID, awsID, snapshotID string, logger log.FieldLogger) error {
+	svc := rds.New(session.New(), &aws.Config{
+		Region: aws.String(DefaultAWSRegion),
+	})
+
+	dbSecurityGroupIDs, err := a.rdsGetDBSecurityGroupIDs(vpcID, logger)
+	if err != nil {
+		return errors.Wrapf(err, "failed to restore a DB cluster from snapshot in the vpc id: %s", vpcID)
+	}
+
+	dbSubnetGroupName, err := a.rdsGetDBSubnetGroupName(vpcID, logger)
+	if err != nil {
+		return errors.Wrapf(err, "failed to restore a DB cluster from snapshot in the vpc id: %s", vpcID)
+	}
+
+	_, err = svc.RestoreDBClusterFromSnapshot(&rds.RestoreDBClusterFromSnapshotInput{
+		AvailabilityZones: []*string{
+			aws.String("us-east-1a"),
+			aws.String("us-east-1b"),
+			aws.String("us-east-1c"),
+		},
+		DBClusterIdentifier:         aws.String(awsID),
+		DBClusterParameterGroupName: aws.String(RDSCustomParamGroupName),
+		DBSubnetGroupName:           aws.String(dbSubnetGroupName),
+		DatabaseName:                aws.String(RDSDefaultDatabaseName),
+		EngineMode:                  aws.String(RDSDefaultEngineMode),
+		Engine:                      aws.String(AuroraMySQLEngineName),
+		EngineVersion:               aws.String(AuroraMySQLEngineVersion),
+		Port:                        aws.Int64(RDSDefaultMySQLPort),
+		VpcSecurityGroupIds:         aws.StringSlice(dbSecurityGroupIDs),
+		SnapshotIdentifier:          aws.String(snapshotID),
+	})
+	if err != nil {
+		return errors.Wrapf(err, "failed to create a DB cluster from snapshot in vpc id: %s", vpcID)
+	}
 
 	return nil
 }

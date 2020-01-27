@@ -11,6 +11,8 @@ const (
 	InstallationDatabaseMysqlOperator = "mysql-operator"
 	// InstallationDatabaseAwsRDS is a database hosted via Amazon RDS.
 	InstallationDatabaseAwsRDS = "aws-rds"
+	// InstallationMigrationDatabaseAwsRDS is a database that is restored from the snapshot of another Amazon RDS database.
+	InstallationMigrationDatabaseAwsRDS = "aws-rds-migration"
 )
 
 // Database is the interface for managing Mattermost databases.
@@ -65,5 +67,5 @@ func (i *Installation) InternalDatabase() bool {
 
 // IsSupportedDatabase returns true if the given database string is supported.
 func IsSupportedDatabase(database string) bool {
-	return database == InstallationDatabaseMysqlOperator || database == InstallationDatabaseAwsRDS
+	return database == InstallationDatabaseMysqlOperator || database == InstallationDatabaseAwsRDS || database == InstallationMigrationDatabaseAwsRDS
 }

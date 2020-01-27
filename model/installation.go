@@ -8,6 +8,7 @@ import (
 // Installation represents a Mattermost installation.
 type Installation struct {
 	ID             string
+	ParentID       string
 	OwnerID        string
 	Version        string
 	DNS            string

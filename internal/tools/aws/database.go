@@ -1,7 +1,9 @@
 package aws
 
 import (
+	"context"
 	"fmt"
+	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/ec2"
@@ -16,7 +18,16 @@ import (
 
 // RDSDatabase is a database backed by AWS RDS.
 type RDSDatabase struct {
-	installationID string
+	installationID       string
+	parentInstallationID string
+}
+
+// NewRDSDatabaseMigration returns a new RDSDatabase interface.
+func NewRDSDatabaseMigration(installationID, parentInstallationID string) *RDSDatabase {
+	return &RDSDatabase{
+		installationID:       installationID,
+		parentInstallationID: parentInstallationID,
+	}
 }
 
 // NewRDSDatabase returns a new RDSDatabase interface.
@@ -31,9 +42,66 @@ func (d *RDSDatabase) Provision(store model.InstallationDatabaseStoreInterface, 
 	awsClient := New()
 	awsClient.AddSQLStore(store)
 
-	err := rdsDatabaseProvision(d.installationID, awsClient, logger)
+	awsID := CloudID(d.installationID)
+	logger.Infof("Provisioning AWS RDS cluster with ID %s", awsID)
+
+	vpcID, err := getVpcID(d.installationID, awsClient, logger)
 	if err != nil {
-		return errors.Wrap(err, "unable to provision RDS database")
+		return errors.Wrap(err, "unable to get resources required for provisioning an RDS database")
+	}
+
+	masterInstanceName := fmt.Sprintf("%s-master", awsID)
+
+	if d.parentInstallationID == "" {
+		rdsSecret, err := awsClient.secretsManagerEnsureRDSSecretCreated(awsID, logger)
+		if err != nil {
+			return err
+		}
+
+		err = awsClient.rdsEnsureDBClusterCreated(awsID, vpcID, rdsSecret.MasterUsername, rdsSecret.MasterPassword, logger)
+		if err != nil {
+			return err
+		}
+	} else {
+		// TODO(gsagula): If we want to wait for the snapshot here, modify Provision interface to take a context.
+		ctx := context.Background()
+		awsParentID := CloudID(d.parentInstallationID)
+
+		logger.Infof("snapshotting RDS Database: %s. This may take several minutes depending on the size of the database.", awsParentID)
+		out, err := awsClient.createDBClusterSnapshot(ctx, awsParentID, logger)
+		if err != nil {
+			return err
+		}
+
+		ctx, cancel := context.WithTimeout(ctx, 60*time.Minute)
+		defer cancel()
+
+		status := awsClient.ensureDBClusterSnapshotStatus(ctx, *out.DBClusterSnapshotIdentifier, RDSStatusAvailable, 30*time.Second)
+		defer status.close()
+		for {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+
+			case <-status.Ok():
+				err = awsClient.rdsEnsureDBClusterCreatedFromSnapshot(vpcID, awsID, *out.DBClusterSnapshotIdentifier, logger)
+				if err != nil {
+					return err
+				}
+				break
+
+			case err := <-status.Error():
+				return err
+
+			default:
+				logger.Debugf("provisioner is still snapshotting the RDS Database: %s", awsParentID)
+			}
+		}
+	}
+
+	err = awsClient.rdsEnsureDBClusterInstanceCreated(awsID, masterInstanceName, logger)
+	if err != nil {
+		return err
 	}
 
 	return nil
@@ -88,72 +156,6 @@ func (d *RDSDatabase) GenerateDatabaseSpecAndSecret(logger log.FieldLogger) (*mm
 	return databaseSpec, databaseSecret, nil
 }
 
-func rdsDatabaseProvision(installationID string, awsClient *Client, logger log.FieldLogger) error {
-	awsID := CloudID(installationID)
-	logger.Infof("Provisioning AWS RDS database with ID %s", awsID)
-
-	// To properly provision the database we need a SQL client to lookup which
-	// cluster(s) the installation is running on.
-	if !awsClient.HasSQLStore() {
-		return errors.New("the provided AWS client does not have SQL store access")
-	}
-
-	clusterInstallations, err := awsClient.store.GetClusterInstallations(&model.ClusterInstallationFilter{
-		PerPage:        model.AllPerPage,
-		InstallationID: installationID,
-	})
-	if err != nil {
-		return errors.Wrapf(err, "unable to lookup cluster installations for installation %s", installationID)
-	}
-
-	clusterInstallationCount := len(clusterInstallations)
-	if clusterInstallationCount == 0 {
-		return fmt.Errorf("no cluster installations found for %s", installationID)
-	}
-	if clusterInstallationCount != 1 {
-		return fmt.Errorf("RDS provisioning is not currently supported for multiple cluster installations (found %d)", clusterInstallationCount)
-	}
-
-	clusterID := clusterInstallations[0].ClusterID
-	vpcFilters := []*ec2.Filter{
-		{
-			Name:   aws.String(VpcClusterIDTagKey),
-			Values: []*string{aws.String(clusterID)},
-		},
-		{
-			Name:   aws.String(VpcAvailableTagKey),
-			Values: []*string{aws.String(VpcAvailableTagValueFalse)},
-		},
-	}
-	vpcs, err := GetVpcsWithFilters(vpcFilters)
-	if err != nil {
-		return err
-	}
-	if len(vpcs) != 1 {
-		return fmt.Errorf("expected 1 VPC for cluster %s, but got %d", clusterID, len(vpcs))
-	}
-
-	vpcID := *vpcs[0].VpcId
-
-	rdsSecret, err := awsClient.secretsManagerEnsureRDSSecretCreated(awsID, logger)
-	if err != nil {
-		return err
-	}
-
-	err = awsClient.rdsEnsureDBClusterCreated(awsID, vpcID, rdsSecret.MasterUsername, rdsSecret.MasterPassword, logger)
-	if err != nil {
-		return err
-	}
-
-	masterInstanceName := fmt.Sprintf("%s-master", awsID)
-	err = awsClient.rdsEnsureDBClusterInstanceCreated(awsID, masterInstanceName, logger)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
 func rdsDatabaseTeardown(installationID string, keepData bool, logger log.FieldLogger) error {
 	logger.Info("Tearing down AWS RDS database")
 
@@ -176,4 +178,49 @@ func rdsDatabaseTeardown(installationID string, keepData bool, logger log.FieldL
 	}
 
 	return nil
+}
+
+func getVpcID(installationID string, awsClient *Client, logger log.FieldLogger) (string, error) {
+	// To properly provision the database we need a SQL client to lookup which
+	// cluster(s) the installation is running on.
+	if !awsClient.HasSQLStore() {
+		return "", errors.New("the provided AWS client does not have SQL store access")
+	}
+
+	clusterInstallations, err := awsClient.store.GetClusterInstallations(&model.ClusterInstallationFilter{
+		PerPage:        model.AllPerPage,
+		InstallationID: installationID,
+	})
+	if err != nil {
+		return "", errors.Wrapf(err, "unable to lookup cluster installations for installation %s", installationID)
+	}
+
+	clusterInstallationCount := len(clusterInstallations)
+	if clusterInstallationCount == 0 {
+		return "", fmt.Errorf("no cluster installations found for %s", installationID)
+	}
+	if clusterInstallationCount != 1 {
+		return "", fmt.Errorf("RDS provisioning is not currently supported for multiple cluster installations (found %d)", clusterInstallationCount)
+	}
+
+	clusterID := clusterInstallations[0].ClusterID
+	vpcFilters := []*ec2.Filter{
+		{
+			Name:   aws.String(VpcClusterIDTagKey),
+			Values: []*string{aws.String(clusterID)},
+		},
+		{
+			Name:   aws.String(VpcAvailableTagKey),
+			Values: []*string{aws.String(VpcAvailableTagValueFalse)},
+		},
+	}
+	vpcs, err := GetVpcsWithFilters(vpcFilters)
+	if err != nil {
+		return "", err
+	}
+	if len(vpcs) != 1 {
+		return "", fmt.Errorf("expected 1 VPC for cluster %s, but got %d", clusterID, len(vpcs))
+	}
+
+	return *vpcs[0].VpcId, nil
 }
