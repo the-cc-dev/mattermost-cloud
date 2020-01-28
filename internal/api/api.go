@@ -7,8 +7,9 @@ func Register(rootRouter *mux.Router, context *Context) {
 	apiRouter := rootRouter.PathPrefix("/api").Subrouter()
 
 	initCluster(apiRouter, context)
-	initInstallation(apiRouter, context)
 	initClusterInstallation(apiRouter, context)
 	initGroup(apiRouter, context)
+	initInstallation(apiRouter, context)
+	initClusterInstallationMigration(apiRouter, context)
 	initWebhook(apiRouter, context)
 }
