@@ -7,14 +7,14 @@ import (
 
 // ClusterInstallationMigration represents a installation migration.
 type ClusterInstallationMigration struct {
-	ID                    string
-	ClusterID             string
-	ClusterInstallationID string
-	State                 string
-	CreateAt              int64
-	DeleteAt              int64
-	LockAcquiredBy        string
-	LockAcquiredAt        string
+	ID             string
+	ClusterID      string
+	InstallationID string
+	State          string
+	CreateAt       int64
+	DeleteAt       int64
+	LockAcquiredBy string
+	LockAcquiredAt string
 }
 
 // ClusterInstallationMigrationFromReader decodes a json-encoded migration from the given io.Reader.

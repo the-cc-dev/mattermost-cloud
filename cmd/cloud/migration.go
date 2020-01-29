@@ -9,10 +9,10 @@ import (
 func init() {
 	migrationCmd.PersistentFlags().String("server", "http://localhost:8075", "The provisioning server whose API will be queried.")
 
-	migrationCreateCmd.Flags().String("cluster-id", "", "Cluster ID where the installation will be migrated to.")
-	migrationCreateCmd.Flags().String("cluster-installation-id", "", "Cluster installation ID where the installation will be migrated from.")
+	migrationCreateCmd.Flags().String("cluster-id", "", "ID of the cluster where the installation will be migrated to.")
+	migrationCreateCmd.Flags().String("installation-id", "", "ID of the installation to be migrated.")
 	migrationCreateCmd.MarkFlagRequired("cluster-id")
-	migrationCreateCmd.MarkFlagRequired("cluster-installation-id")
+	migrationCreateCmd.MarkFlagRequired("installation-id")
 
 	migrationCmd.AddCommand(installationCreateCmd)
 }
@@ -32,11 +32,11 @@ var migrationCreateCmd = &cobra.Command{
 		client := model.NewClient(serverAddress)
 
 		clusterID, _ := command.Flags().GetString("cluster-id")
-		clusterInstallationID, _ := command.Flags().GetString("cluster-installation-id")
+		installationID, _ := command.Flags().GetString("installation-id")
 
 		installation, err := client.CreateClusterInstallationMigration(&model.CreateClusterInstallationMigrationRequest{
-			ClusterID:             clusterID,
-			ClusterInstallationID: clusterInstallationID,
+			ClusterID:      clusterID,
+			InstallationID: installationID,
 		})
 		if err != nil {
 			return errors.Wrap(err, "failed to create migration")

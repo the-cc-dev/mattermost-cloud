@@ -17,39 +17,30 @@ type clusterInstallationMigrationStore interface {
 	UpdateClusterInstallationMigration(migration *model.ClusterInstallationMigration) error
 }
 
-// clusterInstallationMigrationProvisioner abstracts the provisioning operations required by the cluster installation migration supervisor.
-type clusterInstallationMigrationProvisioner interface {
-	CreateClusterInstallationMigration(cluster *model.Cluster, migration *model.ClusterInstallationMigration, clusterInstallation *model.ClusterInstallation, awsClient aws.AWS) error
-	DeleteClusterInstallationMigration(cluster *model.Cluster, migration *model.ClusterInstallationMigration, clusterInstallation *model.ClusterInstallation) error
-}
-
 // ClusterInstallationMigrationSupervisor finds migrations pending work and effects the required changes.
 //
 // The degree of parallelism is controlled by a weighted semaphore, intended to be shared with
 // other clients needing to coordinate background jobs.
 type ClusterInstallationMigrationSupervisor struct {
-	clusterID                string
-	store                    clusterInstallationMigrationStore
-	provisioner              clusterInstallationMigrationProvisioner
-	aws                      aws.AWS
-	clusterResourceThreshold int
-	keepDatabaseData         bool
-	keepFilestoreData        bool
-	logger                   log.FieldLogger
+	clusterID                     string
+	instanceID                    string
+	store                         clusterInstallationMigrationStore
+	installationSupervisor        *InstallationSupervisor
+	clusterInstallationSupervisor *ClusterInstallationSupervisor
+	aws                           aws.AWS
+	logger                        log.FieldLogger
 }
 
 // NewClusterInstallationMigrationSupervisor creates a new ClusterInstallationMigrationSupervisor.
-func NewClusterInstallationMigrationSupervisor(store clusterInstallationMigrationStore, migrationProvisioner clusterInstallationMigrationProvisioner,
-	aws aws.AWS, clusterID string, threshold int, keepDatabaseData, keepFilestoreData bool, logger log.FieldLogger) *ClusterInstallationMigrationSupervisor {
+func NewClusterInstallationMigrationSupervisor(store clusterInstallationMigrationStore, installationSupervisor *InstallationSupervisor,
+	clusterInstallationSupervisor *ClusterInstallationSupervisor, aws aws.AWS, instanceID string, logger log.FieldLogger) *ClusterInstallationMigrationSupervisor {
 	return &ClusterInstallationMigrationSupervisor{
-		clusterID:                clusterID,
-		store:                    store,
-		provisioner:              migrationProvisioner,
-		aws:                      aws,
-		clusterResourceThreshold: threshold,
-		keepDatabaseData:         keepDatabaseData,
-		keepFilestoreData:        keepFilestoreData,
-		logger:                   logger,
+		store:                         store,
+		instanceID:                    instanceID,
+		installationSupervisor:        installationSupervisor,
+		clusterInstallationSupervisor: clusterInstallationSupervisor,
+		aws:                           aws,
+		logger:                        logger,
 	}
 }
 
@@ -80,9 +71,9 @@ func (s *ClusterInstallationMigrationSupervisor) Supervise(migration *model.Clus
 	}
 	defer lock.Unlock()
 
-	logger.Debugf("Supervising migration in state %s", migration.State)
+	logger.Debugf("Supervising cluster installation migration in state %s", migration.State)
 
-	newState := s.transitionClusterInstallationMigration(migration, s.clusterID, logger)
+	newState := s.transitionClusterInstallationMigration(migration, logger)
 
 	migration, err := s.store.GetClusterInstallationMigration(migration.ID)
 	if err != nil {
@@ -106,11 +97,10 @@ func (s *ClusterInstallationMigrationSupervisor) Supervise(migration *model.Clus
 }
 
 // transitionMigration works with the given migration to migration it to a final state.
-func (s *ClusterInstallationMigrationSupervisor) transitionClusterInstallationMigration(migration *model.ClusterInstallationMigration, clusterID string, logger log.FieldLogger) string {
+func (s *ClusterInstallationMigrationSupervisor) transitionClusterInstallationMigration(migration *model.ClusterInstallationMigration, logger log.FieldLogger) string {
 	switch migration.State {
-	case model.InstallationStateCreationRequested,
-		model.InstallationStateCreationNoCompatibleClusters:
-		return s.createClusterInstallationMigration(migration, clusterID, logger)
+	case model.InstallationStateCreationRequested, model.InstallationStateCreationNoCompatibleClusters:
+		return s.createClusterInstallationMigration(migration, logger)
 
 	default:
 		logger.Warnf("Found installation pending work in unexpected state %s", migration.State)
@@ -118,9 +108,20 @@ func (s *ClusterInstallationMigrationSupervisor) transitionClusterInstallationMi
 	}
 }
 
-func (s *ClusterInstallationMigrationSupervisor) createClusterInstallationMigration(migration *model.ClusterInstallationMigration, clusterID string, logger log.FieldLogger) string {
+func (s *ClusterInstallationMigrationSupervisor) createClusterInstallationMigration(migration *model.ClusterInstallationMigration, logger log.FieldLogger) string {
+	installation, err := s.installationSupervisor.store.GetInstallation(migration.InstallationID)
+	if err != nil {
+		return model.ClusterInstallationMigrationStateCreationFailed
+	}
 
-	// TODO(gsagula): implement the necessary steps for creation here.
+	if installation.State != model.InstallationStateStable {
+		return model.ClusterInstallationMigrationStateCreationFailed
+	}
 
-	return model.ClusterInstallationMigrationStateCreationFailed
+	err = s.store.CreateClusterInstallationMigration(migration)
+	if err != nil {
+		return model.ClusterInstallationMigrationStateCreationFailed
+	}
+
+	return model.ClusterInstallationMigrationStateCreationRequested
 }

@@ -36,8 +36,8 @@ func (sqlStore *SQLStore) GetClusterInstallationMigration(id string) (*model.Clu
 	return &migration, nil
 }
 
-// GetUnlockedClusterInstallationMigrationPendingWork returns an unlocked cluster installation migration in a pending state.
-func (sqlStore *SQLStore) GetUnlockedClusterInstallationMigrationPendingWork() ([]*model.ClusterInstallationMigration, error) {
+// GetUnlockedClusterInstallationMigrationsPendingWork returns an unlocked cluster installation migration in a pending state.
+func (sqlStore *SQLStore) GetUnlockedClusterInstallationMigrationsPendingWork() ([]*model.ClusterInstallationMigration, error) {
 	builder := clusterInstallationMigrationSelect.
 		Where(sq.Eq{
 			"State": model.AllInstallationStatesPendingWork,
@@ -96,14 +96,14 @@ func (sqlStore *SQLStore) CreateClusterInstallationMigration(migration *model.Cl
 	_, err := sqlStore.execBuilder(sqlStore.db, sq.
 		Insert(clusterInstallationMigrationTable).
 		SetMap(map[string]interface{}{
-			"ID":                    migration.ID,
-			"ClusterID":             migration.ClusterID,
-			"ClusterInstallationID": migration.ClusterInstallationID,
-			"State":                 migration.State,
-			"CreateAt":              migration.CreateAt,
-			"DeleteAt":              0,
-			"LockAcquiredBy":        nil,
-			"LockAcquiredAt":        0,
+			"ID":             migration.ID,
+			"ClusterID":      migration.ClusterID,
+			"InstallationID": migration.InstallationID,
+			"State":          migration.State,
+			"CreateAt":       migration.CreateAt,
+			"DeleteAt":       0,
+			"LockAcquiredBy": nil,
+			"LockAcquiredAt": 0,
 		}),
 	)
 	if err != nil {
@@ -118,14 +118,14 @@ func (sqlStore *SQLStore) UpdateClusterInstallationMigration(migration *model.Cl
 	_, err := sqlStore.execBuilder(sqlStore.db, sq.
 		Update(clusterInstallationMigrationTable).
 		SetMap(map[string]interface{}{
-			"ID":                    migration.ID,
-			"ClusterID":             migration.ClusterID,
-			"ClusterInstallationID": migration.ClusterInstallationID,
-			"State":                 migration.State,
-			"CreateAt":              migration.CreateAt,
-			"DeleteAt":              migration.DeleteAt,
-			"LockAcquiredBy":        migration.LockAcquiredBy,
-			"LockAcquiredAt":        migration.LockAcquiredAt,
+			"ID":             migration.ID,
+			"ClusterID":      migration.ClusterID,
+			"InstallationID": migration.InstallationID,
+			"State":          migration.State,
+			"CreateAt":       migration.CreateAt,
+			"DeleteAt":       migration.DeleteAt,
+			"LockAcquiredBy": migration.LockAcquiredBy,
+			"LockAcquiredAt": migration.LockAcquiredAt,
 		}).
 		Where("ID = ?", migration.ID),
 	)

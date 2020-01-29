@@ -580,7 +580,7 @@ var migrations = []migration{
 
 		return nil
 	}},
-	{semver.MustParse("0.10.0"), semver.MustParse("0.11.0"), func(e execer) error {
+	{semver.MustParse("0.11.0"), semver.MustParse("0.12.0"), func(e execer) error {
 		_, err := e.Exec(`
 			CREATE TABLE ClusterInstallationMigration (
 				ID TEXT PRIMARY KEY,
