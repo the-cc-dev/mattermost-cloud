@@ -19,8 +19,8 @@ const (
 // Database is the interface for managing Mattermost databases.
 type Database interface {
 	Provision(store InstallationDatabaseStoreInterface, logger log.FieldLogger) error
-	Snapshot(store InstallationDatabaseStoreInterface, key, value string, logger log.FieldLogger) error
-	Restore(store InstallationDatabaseStoreInterface, key, value string, logger log.FieldLogger) error
+	Snapshot(store InstallationDatabaseStoreInterface, logger log.FieldLogger) error
+	Restore(store InstallationDatabaseStoreInterface, clusterID string, logger log.FieldLogger) error
 	Teardown(keepData bool, logger log.FieldLogger) error
 	GenerateDatabaseSpecAndSecret(logger log.FieldLogger) (*mmv1alpha1.Database, *corev1.Secret, error)
 }

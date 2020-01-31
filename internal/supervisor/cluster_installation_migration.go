@@ -108,7 +108,7 @@ func (s *ClusterInstallationMigrationSupervisor) transitionClusterInstallationMi
 	case model.ClusterInstallationMigrationStateSnapshotCreationIP:
 		return s.createClusterInstallation(migration, logger)
 	case model.ClusterInstallationMigrationStateClusterInstallationCreationIP:
-		return s.waitClusterInstallation(migration, logger)
+		return s.waitForClusterInstallation(migration, logger)
 	case model.ClusterInstallationMigrationStateClusterInstallationCreated:
 		return s.restoreDatabase(migration, logger)
 
@@ -187,7 +187,7 @@ func (s *ClusterInstallationMigrationSupervisor) createClusterInstallationSnapsh
 	}
 
 	// Create snapshot of the the master installation.
-	err = utils.GetDatabase(installation).Snapshot(s.installationSupervisor.store, aws.DefaultMigrationSnapshotTagKey, migration.ClusterInstallationID, logger)
+	err = utils.GetDatabase(installation).Snapshot(s.installationSupervisor.store, logger)
 	if err != nil {
 		return model.ClusterInstallationMigrationStateCreationFailed
 	}
@@ -249,7 +249,7 @@ func (s *ClusterInstallationMigrationSupervisor) createClusterInstallation(migra
 	return migration.State
 }
 
-func (s *ClusterInstallationMigrationSupervisor) waitClusterInstallation(migration *model.ClusterInstallationMigration,
+func (s *ClusterInstallationMigrationSupervisor) waitForClusterInstallation(migration *model.ClusterInstallationMigration,
 	logger log.FieldLogger) string {
 
 	clusterInstallationMigration, err := s.store.GetClusterInstallationMigration(migration.ID)
@@ -326,9 +326,17 @@ func (s *ClusterInstallationMigrationSupervisor) restoreDatabase(migration *mode
 		return model.ClusterInstallationMigrationStateCreationFailed
 	}
 
-	newInstallationInstance, err := getInstallationInstance()
-
-	utils.GetDatabase(newInstallationInstance).Restore(s.installationSupervisor.store, aws.DefaultMigrationSnapshotTagKey, migration.ClusterInstallationID)
+	err = utils.GetDatabase(installation).Restore(s.installationSupervisor.store, migration.ClusterID, logger)
+	if err != nil {
+		switch err.Error() {
+		case aws.RDSErrorSnapshotCreating:
+			return migration.State
+		case aws.RDSErrorSnapshotModifying:
+			return migration.State
+		default:
+			return model.ClusterInstallationMigrationStateCreationFailed
+		}
+	}
 
 	// Change state to cluster installation creation in progress.
 	migration.State = model.ClusterInstallationMigrationStateClusterInstallationCreated

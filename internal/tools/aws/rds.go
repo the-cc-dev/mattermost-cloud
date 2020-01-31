@@ -34,18 +34,6 @@ type DBClusterSnapshot struct {
 	Status     string
 }
 
-func (a *Client) SnapshotDBCluster(key, value string) error {
-
-}
-
-func (a *Client) GetDBClusterSnapshot(key, value string) (DBClusterSnapshot, error) {
-
-}
-
-func (a *Client) RestoreDBCluster(snapshot DBClusterSnapshot) error {
-
-}
-
 func (a *Client) rdsGetDBSecurityGroupIDs(vpcID string, logger log.FieldLogger) ([]string, error) {
 	svc := ec2.New(session.New(), &aws.Config{
 		Region: aws.String(DefaultAWSRegion),
@@ -279,7 +267,7 @@ func (a *Client) rdsEnsureDBClusterDeleted(awsID string, logger log.FieldLogger)
 	return nil
 }
 
-func (a *Client) rdsEnsureDBClusterSnapshotCreated(awsID, key, value string) error {
+func (a *Client) rdsEnsureDBClusterSnapshotCreated(awsID string, tags []*rds.Tag) error {
 	svc := rds.New(session.New(), &aws.Config{
 		Region: aws.String(DefaultAWSRegion),
 	})
@@ -287,10 +275,7 @@ func (a *Client) rdsEnsureDBClusterSnapshotCreated(awsID, key, value string) err
 	_, err := svc.CreateDBClusterSnapshot(&rds.CreateDBClusterSnapshotInput{
 		DBClusterIdentifier:         aws.String(awsID),
 		DBClusterSnapshotIdentifier: aws.String(fmt.Sprintf("%s-snapshot-%s", awsID, model.NewID())),
-		Tags: []*rds.Tag{&rds.Tag{
-			Key:   aws.String(key),
-			Value: aws.String(value),
-		}},
+		Tags:                        tags,
 	})
 	if err != nil {
 		return errors.Wrap(err, "failed to create a DB cluster snapshot for replication")
@@ -299,7 +284,7 @@ func (a *Client) rdsEnsureDBClusterSnapshotCreated(awsID, key, value string) err
 	return nil
 }
 
-func (a *Client) rdsGetDBClusterSnapshot(key, value string) (*rds.DBClusterSnapshot, error) {
+func (a *Client) rdsGetSnapshotTagsMap(filter []*rds.Filter) (*map[*rds.DBClusterSnapshot][]*rds.Tag, error) {
 	svc := rds.New(session.New(), &aws.Config{
 		Region: aws.String(DefaultAWSRegion),
 	})
@@ -311,30 +296,57 @@ func (a *Client) rdsGetDBClusterSnapshot(key, value string) (*rds.DBClusterSnaps
 		return nil, errors.Wrap(err, "failed to describe RDS database cluster")
 	}
 
-	var snapshots []*rds.DBClusterSnapshot
+	snapshotTagListMap := make(map[*rds.DBClusterSnapshot][]*rds.Tag, len(dbClusterSnapshotsOut.DBClusterSnapshots))
 	for _, snapshot := range dbClusterSnapshotsOut.DBClusterSnapshots {
 		listTagsForResourceOut, err := svc.ListTagsForResource(&rds.ListTagsForResourceInput{
 			ResourceName: snapshot.DBClusterSnapshotArn,
+			Filters:      filter,
 		})
 		if err != nil {
 			return nil, err
 		}
-		for _, tag := range listTagsForResourceOut.TagList {
-			if *tag.Key == key {
-				if tag.Value != nil && *tag.Value == value {
-					snapshots = append(snapshots, snapshot)
-				}
-			}
-		}
+		snapshotTagListMap[snapshot] = listTagsForResourceOut.TagList
 	}
 
-	length := len(snapshots)
-	if length != 1 {
-		return nil, errors.Errorf("only one snapshot should be associated with tag %s:%s, but found %v", key, value, length)
-	}
-
-	return snapshots[0], nil
+	return &snapshotTagListMap, nil
 }
+
+// func (a *Client) rdsGetDBClusterSnapshot(key, value string) (*rds.DBClusterSnapshot, error) {
+// 	svc := rds.New(session.New(), &aws.Config{
+// 		Region: aws.String(DefaultAWSRegion),
+// 	})
+
+// 	dbClusterSnapshotsOut, err := svc.DescribeDBClusterSnapshots(&rds.DescribeDBClusterSnapshotsInput{
+// 		SnapshotType: aws.String(RDSDefaultSnapshotType),
+// 	})
+// 	if err != nil {
+// 		return nil, errors.Wrap(err, "failed to describe RDS database cluster")
+// 	}
+
+// 	var snapshots []*rds.DBClusterSnapshot
+// 	for _, snapshot := range dbClusterSnapshotsOut.DBClusterSnapshots {
+// 		listTagsForResourceOut, err := svc.ListTagsForResource(&rds.ListTagsForResourceInput{
+// 			ResourceName: snapshot.DBClusterSnapshotArn,
+// 		})
+// 		if err != nil {
+// 			return nil, err
+// 		}
+// 		for _, tag := range listTagsForResourceOut.TagList {
+// 			if *tag.Key == key {
+// 				if tag.Value != nil && *tag.Value == value {
+// 					snapshots = append(snapshots, snapshot)
+// 				}
+// 			}
+// 		}
+// 	}
+
+// 	length := len(snapshots)
+// 	if length != 1 {
+// 		return nil, errors.Errorf("only one snapshot should be associated with tag %s:%s, but found %v", key, value, length)
+// 	}
+
+// 	return snapshots[0], nil
+// }
 
 func (a *Client) rdsEnsureRestoreDBClusterFromSnapshot(vpcID, awsID, snapshotID string, logger log.FieldLogger) error {
 	svc := rds.New(session.New(), &aws.Config{

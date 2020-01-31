@@ -84,9 +84,12 @@ const (
 	// in AWS Route53.
 	DefaultPublicCloudDNSTagValue = "public"
 
-	// DefaultMigrationSnapshotTagKey is the prefix value used when tagging a RDS database snapshot for
-	// a cluster installation migration.
-	DefaultMigrationSnapshotTagKey = "cluster-installation-migration"
+	// DefaultClusterInstallationSnapshotTagKey is used for tagging snapshots of a cluster installation.
+	DefaultClusterInstallationSnapshotTagKey = "tag:ClusterInstallationSnapshot"
+
+	// DefaultClusterInstallationSnapshotTagValueTemplate is used for tagging snapshots of a cluster installation.
+	// Cluster installation id should be passed to this template when tagging the resource.
+	DefaultClusterInstallationSnapshotTagValueTemplate = "rds-snapshot-%s"
 
 	// cloudIDPrefix is the prefix value used when creating AWS resource names.
 	// Warning:
