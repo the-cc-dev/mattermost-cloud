@@ -95,8 +95,6 @@ func GetDatabase(i *model.Installation) model.Database {
 		return model.NewMysqlOperatorDatabase()
 	case model.InstallationDatabaseAwsRDS:
 		return aws.NewRDSDatabase(i.ID)
-	case model.InstallationMigrationDatabaseAwsRDS:
-		return aws.NewRDSDatabaseMigration(i.ID, i.ParentID)
 	}
 
 	// Warning: we should never get here as it would mean that we didn't match

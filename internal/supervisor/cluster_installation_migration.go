@@ -1,9 +1,7 @@
 package supervisor
 
 import (
-	"github.com/mattermost/mattermost-cloud/internal/tools/aws"
 	awstools "github.com/mattermost/mattermost-cloud/internal/tools/aws"
-	"github.com/mattermost/mattermost-cloud/internal/tools/utils"
 	"github.com/mattermost/mattermost-cloud/model"
 	log "github.com/sirupsen/logrus"
 )
@@ -103,14 +101,14 @@ func (s *ClusterInstallationMigrationSupervisor) transitionClusterInstallationMi
 	switch migration.State {
 	case model.InstallationStateCreationRequested, model.InstallationStateCreationNoCompatibleClusters:
 		return s.createClusterInstallationMigration(migration, logger)
-	case model.ClusterInstallationMigrationStateCreateSnapshot:
-		return s.createClusterInstallationSnapshot(migration, logger)
-	case model.ClusterInstallationMigrationStateSnapshotCreationIP:
-		return s.createClusterInstallation(migration, logger)
-	case model.ClusterInstallationMigrationStateClusterInstallationCreationIP:
-		return s.waitForClusterInstallation(migration, logger)
-	case model.ClusterInstallationMigrationStateClusterInstallationCreated:
-		return s.restoreDatabase(migration, logger)
+	// case model.ClusterInstallationMigrationStateCreateSnapshot:
+	// 	return s.createClusterInstallationSnapshot(migration, logger)
+	// case model.ClusterInstallationMigrationStateSnapshotCreationIP:
+	// 	return s.createClusterInstallation(migration, logger)
+	// case model.ClusterInstallationMigrationStateClusterInstallationCreationIP:
+	// 	return s.waitForClusterInstallation(migration, logger)
+	// case model.ClusterInstallationMigrationStateClusterInstallationCreated:
+	// 	return s.restoreDatabase(migration, logger)
 
 	default:
 		logger.Warnf("Found installation pending work in unexpected state %s", migration.State)
@@ -121,37 +119,41 @@ func (s *ClusterInstallationMigrationSupervisor) transitionClusterInstallationMi
 func (s *ClusterInstallationMigrationSupervisor) createClusterInstallationMigration(migration *model.ClusterInstallationMigration, logger log.FieldLogger) string {
 	clusterInstallationMigration, err := s.store.GetClusterInstallationMigration(migration.ID)
 	if err != nil {
-		return model.ClusterInstallationMigrationStateCreationFailed
-	}
-	if clusterInstallationMigration.State != model.ClusterInstallationMigrationStateCreationRequested {
+		logger.Errorf("failed to get cluster installation migration: %s", err.Error())
 		return model.ClusterInstallationMigrationStateCreationFailed
 	}
 
+	// Get cluster installation and lock it.
 	clusterInstallation, err := s.clusterInstallationSupervisor.store.GetClusterInstallation(migration.ClusterInstallationID)
 	if err != nil {
+		logger.Errorf("failed to get cluster installation: %s", err.Error())
 		return model.ClusterInstallationMigrationStateCreationFailed
 	}
 
-	installation, err := s.installationSupervisor.store.GetInstallation(clusterInstallation.InstallationID)
-	if err != nil {
-		return model.ClusterInstallationMigrationStateCreationFailed
-	}
-
-	// Lock cluster installation.
 	clusterInstallationLocked, err := s.clusterInstallationSupervisor.store.LockClusterInstallations([]string{clusterInstallation.ID}, clusterInstallationMigration.ID)
 	if err != nil {
+		logger.Errorf("unable to lock cluster installation: %s", clusterInstallation.ID)
 		return model.ClusterInstallationMigrationStateCreationFailed
 	}
 	if !clusterInstallationLocked {
+		logger.Debugf("still locking cluster installation id: %s", clusterInstallation.ID)
 		return model.ClusterInstallationMigrationStateCreationRequested
 	}
 
-	// Lock installation.
+	// Get installation and lock it.
+	installation, err := s.installationSupervisor.store.GetInstallation(clusterInstallation.InstallationID)
+	if err != nil {
+		logger.Errorf("failed to get installation: %s", err.Error())
+		return model.ClusterInstallationMigrationStateCreationFailed
+	}
+
 	installationLocked, err := s.installationSupervisor.store.LockInstallation(installation.ID, clusterInstallationMigration.ID)
 	if err != nil {
+		logger.Errorf("unable to lock installation: %s", err.Error())
 		return model.ClusterInstallationMigrationStateCreationFailed
 	}
 	if !installationLocked {
+		logger.Debugf("still locking installation id: %s", installation.ID)
 		return model.ClusterInstallationMigrationStateCreationRequested
 	}
 
@@ -165,185 +167,185 @@ func (s *ClusterInstallationMigrationSupervisor) createClusterInstallationMigrat
 	return migration.State
 }
 
-func (s *ClusterInstallationMigrationSupervisor) createClusterInstallationSnapshot(migration *model.ClusterInstallationMigration,
-	logger log.FieldLogger) string {
+// func (s *ClusterInstallationMigrationSupervisor) createClusterInstallationSnapshot(migration *model.ClusterInstallationMigration,
+// 	logger log.FieldLogger) string {
 
-	clusterInstallationMigration, err := s.store.GetClusterInstallationMigration(migration.ID)
-	if err != nil {
-		return model.ClusterInstallationMigrationStateCreationFailed
-	}
-	if clusterInstallationMigration.State != model.ClusterInstallationMigrationStateCreationRequested {
-		return model.ClusterInstallationMigrationStateCreationFailed
-	}
+// 	clusterInstallationMigration, err := s.store.GetClusterInstallationMigration(migration.ID)
+// 	if err != nil {
+// 		return model.ClusterInstallationMigrationStateCreationFailed
+// 	}
+// 	if clusterInstallationMigration.State != model.ClusterInstallationMigrationStateCreationRequested {
+// 		return model.ClusterInstallationMigrationStateCreationFailed
+// 	}
 
-	clusterInstallation, err := s.clusterInstallationSupervisor.store.GetClusterInstallation(migration.ClusterInstallationID)
-	if err != nil {
-		return model.ClusterInstallationMigrationStateCreationFailed
-	}
+// 	clusterInstallation, err := s.clusterInstallationSupervisor.store.GetClusterInstallation(migration.ClusterInstallationID)
+// 	if err != nil {
+// 		return model.ClusterInstallationMigrationStateCreationFailed
+// 	}
 
-	installation, err := s.installationSupervisor.store.GetInstallation(clusterInstallation.InstallationID)
-	if err != nil {
-		return model.ClusterInstallationMigrationStateCreationFailed
-	}
+// 	installation, err := s.installationSupervisor.store.GetInstallation(clusterInstallation.InstallationID)
+// 	if err != nil {
+// 		return model.ClusterInstallationMigrationStateCreationFailed
+// 	}
 
-	// Create snapshot of the the master installation.
-	err = utils.GetDatabase(installation).Snapshot(s.installationSupervisor.store, logger)
-	if err != nil {
-		return model.ClusterInstallationMigrationStateCreationFailed
-	}
+// 	// Create snapshot of the the master installation.
+// 	err = utils.GetDatabase(installation).Snapshot(s.installationSupervisor.store, logger)
+// 	if err != nil {
+// 		return model.ClusterInstallationMigrationStateCreationFailed
+// 	}
 
-	// Change state to snapshot creation in progress.
-	migration.State = model.ClusterInstallationMigrationStateSnapshotCreationIP
-	err = s.store.UpdateClusterInstallationMigration(migration)
-	if err != nil {
-		return model.ClusterInstallationMigrationStateCreationFailed
-	}
+// 	// Change state to snapshot creation in progress.
+// 	migration.State = model.ClusterInstallationMigrationStateSnapshotCreationIP
+// 	err = s.store.UpdateClusterInstallationMigration(migration)
+// 	if err != nil {
+// 		return model.ClusterInstallationMigrationStateCreationFailed
+// 	}
 
-	return migration.State
-}
+// 	return migration.State
+// }
 
-func (s *ClusterInstallationMigrationSupervisor) createClusterInstallation(migration *model.ClusterInstallationMigration,
-	logger log.FieldLogger) string {
+// func (s *ClusterInstallationMigrationSupervisor) createClusterInstallation(migration *model.ClusterInstallationMigration,
+// 	logger log.FieldLogger) string {
 
-	clusterInstallationMigration, err := s.store.GetClusterInstallationMigration(migration.ID)
-	if err != nil {
-		return model.ClusterInstallationMigrationStateCreationFailed
-	}
-	if clusterInstallationMigration.State != model.ClusterInstallationMigrationStateSnapshotCreationIP {
-		return model.ClusterInstallationMigrationStateCreationFailed
-	}
+// 	clusterInstallationMigration, err := s.store.GetClusterInstallationMigration(migration.ID)
+// 	if err != nil {
+// 		return model.ClusterInstallationMigrationStateCreationFailed
+// 	}
+// 	if clusterInstallationMigration.State != model.ClusterInstallationMigrationStateSnapshotCreationIP {
+// 		return model.ClusterInstallationMigrationStateCreationFailed
+// 	}
 
-	cluster, err := s.clusterSupervisor.store.GetCluster(clusterInstallationMigration.ClusterID)
-	if err != nil {
-		return model.ClusterInstallationMigrationStateCreationFailed
-	}
+// 	cluster, err := s.clusterSupervisor.store.GetCluster(clusterInstallationMigration.ClusterID)
+// 	if err != nil {
+// 		return model.ClusterInstallationMigrationStateCreationFailed
+// 	}
 
-	clusterInstallation, err := s.clusterInstallationSupervisor.store.GetClusterInstallation(migration.ClusterInstallationID)
-	if err != nil {
-		return model.ClusterInstallationMigrationStateCreationFailed
-	}
+// 	clusterInstallation, err := s.clusterInstallationSupervisor.store.GetClusterInstallation(migration.ClusterInstallationID)
+// 	if err != nil {
+// 		return model.ClusterInstallationMigrationStateCreationFailed
+// 	}
 
-	installation, err := s.installationSupervisor.store.GetInstallation(clusterInstallation.InstallationID)
-	if err != nil {
-		return model.ClusterInstallationMigrationStateCreationFailed
-	}
+// 	installation, err := s.installationSupervisor.store.GetInstallation(clusterInstallation.InstallationID)
+// 	if err != nil {
+// 		return model.ClusterInstallationMigrationStateCreationFailed
+// 	}
 
-	clusterInstallationRequest := s.installationSupervisor.createClusterInstallation(cluster, installation, s.instanceID, logger)
-	if clusterInstallationRequest.State != model.ClusterStateCreationRequested {
-		return model.ClusterInstallationMigrationStateCreationFailed
-	}
+// 	clusterInstallationRequest := s.installationSupervisor.createClusterInstallation(cluster, installation, s.instanceID, logger)
+// 	if clusterInstallationRequest.State != model.ClusterStateCreationRequested {
+// 		return model.ClusterInstallationMigrationStateCreationFailed
+// 	}
 
-	err = s.installationSupervisor.Do()
-	if err != nil {
-		return model.ClusterInstallationMigrationStateCreationFailed
-	}
-	s.installationSupervisor.Supervise(installation)
+// 	err = s.installationSupervisor.Do()
+// 	if err != nil {
+// 		return model.ClusterInstallationMigrationStateCreationFailed
+// 	}
+// 	s.installationSupervisor.Supervise(installation)
 
-	// Change state to cluster installation creation in progress.
-	migration.State = model.ClusterInstallationMigrationStateClusterInstallationCreationIP
-	err = s.store.UpdateClusterInstallationMigration(migration)
-	if err != nil {
-		return model.ClusterInstallationMigrationStateCreationFailed
-	}
+// 	// Change state to cluster installation creation in progress.
+// 	migration.State = model.ClusterInstallationMigrationStateClusterInstallationCreationIP
+// 	err = s.store.UpdateClusterInstallationMigration(migration)
+// 	if err != nil {
+// 		return model.ClusterInstallationMigrationStateCreationFailed
+// 	}
 
-	return migration.State
-}
+// 	return migration.State
+// }
 
-func (s *ClusterInstallationMigrationSupervisor) waitForClusterInstallation(migration *model.ClusterInstallationMigration,
-	logger log.FieldLogger) string {
+// func (s *ClusterInstallationMigrationSupervisor) waitForClusterInstallation(migration *model.ClusterInstallationMigration,
+// 	logger log.FieldLogger) string {
 
-	clusterInstallationMigration, err := s.store.GetClusterInstallationMigration(migration.ID)
-	if err != nil {
-		return model.ClusterInstallationMigrationStateCreationFailed
-	}
-	if clusterInstallationMigration.State != model.ClusterInstallationMigrationStateClusterInstallationCreationIP {
-		return model.ClusterInstallationMigrationStateCreationFailed
-	}
+// 	clusterInstallationMigration, err := s.store.GetClusterInstallationMigration(migration.ID)
+// 	if err != nil {
+// 		return model.ClusterInstallationMigrationStateCreationFailed
+// 	}
+// 	if clusterInstallationMigration.State != model.ClusterInstallationMigrationStateClusterInstallationCreationIP {
+// 		return model.ClusterInstallationMigrationStateCreationFailed
+// 	}
 
-	clusterInstallation, err := s.clusterInstallationSupervisor.store.GetClusterInstallation(migration.ClusterInstallationID)
-	if err != nil {
-		return model.ClusterInstallationMigrationStateCreationFailed
-	}
+// 	clusterInstallation, err := s.clusterInstallationSupervisor.store.GetClusterInstallation(migration.ClusterInstallationID)
+// 	if err != nil {
+// 		return model.ClusterInstallationMigrationStateCreationFailed
+// 	}
 
-	installation, err := s.installationSupervisor.store.GetInstallation(clusterInstallation.InstallationID)
-	if err != nil {
-		return model.ClusterInstallationMigrationStateCreationFailed
-	}
+// 	installation, err := s.installationSupervisor.store.GetInstallation(clusterInstallation.InstallationID)
+// 	if err != nil {
+// 		return model.ClusterInstallationMigrationStateCreationFailed
+// 	}
 
-	clusterInstallations, err := s.installationSupervisor.store.GetClusterInstallations(&model.ClusterInstallationFilter{
-		ClusterID:      migration.ClusterID,
-		InstallationID: installation.ID,
-		IncludeDeleted: false,
-	})
-	if err != nil || len(clusterInstallations) != 1 {
-		return model.ClusterInstallationMigrationStateCreationFailed
-	}
+// 	clusterInstallations, err := s.installationSupervisor.store.GetClusterInstallations(&model.ClusterInstallationFilter{
+// 		ClusterID:      migration.ClusterID,
+// 		InstallationID: installation.ID,
+// 		IncludeDeleted: false,
+// 	})
+// 	if err != nil || len(clusterInstallations) != 1 {
+// 		return model.ClusterInstallationMigrationStateCreationFailed
+// 	}
 
-	if clusterInstallations[0].State != model.ClusterInstallationStateStable {
-		return migration.State
-	}
+// 	if clusterInstallations[0].State != model.ClusterInstallationStateStable {
+// 		return migration.State
+// 	}
 
-	// Change state to cluster installation creation in progress.
-	migration.State = model.ClusterInstallationMigrationStateClusterInstallationCreated
-	err = s.store.UpdateClusterInstallationMigration(migration)
-	if err != nil {
-		return model.ClusterInstallationMigrationStateCreationFailed
-	}
+// 	// Change state to cluster installation creation in progress.
+// 	migration.State = model.ClusterInstallationMigrationStateClusterInstallationCreated
+// 	err = s.store.UpdateClusterInstallationMigration(migration)
+// 	if err != nil {
+// 		return model.ClusterInstallationMigrationStateCreationFailed
+// 	}
 
-	return migration.State
-}
+// 	return migration.State
+// }
 
-func (s *ClusterInstallationMigrationSupervisor) restoreDatabase(migration *model.ClusterInstallationMigration,
-	logger log.FieldLogger) string {
+// func (s *ClusterInstallationMigrationSupervisor) restoreDatabase(migration *model.ClusterInstallationMigration,
+// 	logger log.FieldLogger) string {
 
-	clusterInstallationMigration, err := s.store.GetClusterInstallationMigration(migration.ID)
-	if err != nil {
-		return model.ClusterInstallationMigrationStateCreationFailed
-	}
-	if clusterInstallationMigration.State != model.ClusterInstallationMigrationStateClusterInstallationCreationIP {
-		return model.ClusterInstallationMigrationStateCreationFailed
-	}
+// 	clusterInstallationMigration, err := s.store.GetClusterInstallationMigration(migration.ID)
+// 	if err != nil {
+// 		return model.ClusterInstallationMigrationStateCreationFailed
+// 	}
+// 	if clusterInstallationMigration.State != model.ClusterInstallationMigrationStateClusterInstallationCreationIP {
+// 		return model.ClusterInstallationMigrationStateCreationFailed
+// 	}
 
-	clusterInstallation, err := s.clusterInstallationSupervisor.store.GetClusterInstallation(migration.ClusterInstallationID)
-	if err != nil {
-		return model.ClusterInstallationMigrationStateCreationFailed
-	}
+// 	clusterInstallation, err := s.clusterInstallationSupervisor.store.GetClusterInstallation(migration.ClusterInstallationID)
+// 	if err != nil {
+// 		return model.ClusterInstallationMigrationStateCreationFailed
+// 	}
 
-	installation, err := s.installationSupervisor.store.GetInstallation(clusterInstallation.InstallationID)
-	if err != nil {
-		return model.ClusterInstallationMigrationStateCreationFailed
-	}
+// 	installation, err := s.installationSupervisor.store.GetInstallation(clusterInstallation.InstallationID)
+// 	if err != nil {
+// 		return model.ClusterInstallationMigrationStateCreationFailed
+// 	}
 
-	clusterInstallations, err := s.installationSupervisor.store.GetClusterInstallations(&model.ClusterInstallationFilter{
-		ClusterID:      migration.ClusterID,
-		InstallationID: installation.ID,
-		IncludeDeleted: false,
-	})
-	if err != nil || len(clusterInstallations) != 1 {
-		return model.ClusterInstallationMigrationStateCreationFailed
-	}
-	if clusterInstallations[0].State != model.ClusterInstallationStateStable {
-		return model.ClusterInstallationMigrationStateCreationFailed
-	}
+// 	clusterInstallations, err := s.installationSupervisor.store.GetClusterInstallations(&model.ClusterInstallationFilter{
+// 		ClusterID:      migration.ClusterID,
+// 		InstallationID: installation.ID,
+// 		IncludeDeleted: false,
+// 	})
+// 	if err != nil || len(clusterInstallations) != 1 {
+// 		return model.ClusterInstallationMigrationStateCreationFailed
+// 	}
+// 	if clusterInstallations[0].State != model.ClusterInstallationStateStable {
+// 		return model.ClusterInstallationMigrationStateCreationFailed
+// 	}
 
-	err = utils.GetDatabase(installation).Restore(s.installationSupervisor.store, migration.ClusterID, logger)
-	if err != nil {
-		switch err.Error() {
-		case aws.RDSErrorSnapshotCreating:
-			return migration.State
-		case aws.RDSErrorSnapshotModifying:
-			return migration.State
-		default:
-			return model.ClusterInstallationMigrationStateCreationFailed
-		}
-	}
+// 	err = utils.GetDatabase(installation).Restore(s.installationSupervisor.store, migration.ClusterID, logger)
+// 	if err != nil {
+// 		switch err.Error() {
+// 		case aws.RDSErrorSnapshotCreating:
+// 			return migration.State
+// 		case aws.RDSErrorSnapshotModifying:
+// 			return migration.State
+// 		default:
+// 			return model.ClusterInstallationMigrationStateCreationFailed
+// 		}
+// 	}
 
-	// Change state to cluster installation creation in progress.
-	migration.State = model.ClusterInstallationMigrationStateClusterInstallationCreated
-	err = s.store.UpdateClusterInstallationMigration(migration)
-	if err != nil {
-		return model.ClusterInstallationMigrationStateCreationFailed
-	}
+// 	// Change state to cluster installation creation in progress.
+// 	migration.State = model.ClusterInstallationMigrationStateClusterInstallationCreated
+// 	err = s.store.UpdateClusterInstallationMigration(migration)
+// 	if err != nil {
+// 		return model.ClusterInstallationMigrationStateCreationFailed
+// 	}
 
-	return migration.State
-}
+// 	return migration.State
+// }

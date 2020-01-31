@@ -12,14 +12,12 @@ const (
 	InstallationDatabaseMysqlOperator = "mysql-operator"
 	// InstallationDatabaseAwsRDS is a database hosted via Amazon RDS.
 	InstallationDatabaseAwsRDS = "aws-rds"
-	// InstallationMigrationDatabaseAwsRDS is a database that is restored from the snapshot of another Amazon RDS database.
-	InstallationMigrationDatabaseAwsRDS = "aws-rds-migration"
 )
 
 // Database is the interface for managing Mattermost databases.
 type Database interface {
 	Provision(store InstallationDatabaseStoreInterface, logger log.FieldLogger) error
-	Snapshot(store InstallationDatabaseStoreInterface, logger log.FieldLogger) error
+	Snapshot(logger log.FieldLogger) error
 	Restore(store InstallationDatabaseStoreInterface, clusterID string, logger log.FieldLogger) error
 	Teardown(keepData bool, logger log.FieldLogger) error
 	GenerateDatabaseSpecAndSecret(logger log.FieldLogger) (*mmv1alpha1.Database, *corev1.Secret, error)
@@ -40,12 +38,12 @@ func NewMysqlOperatorDatabase() *MysqlOperatorDatabase {
 }
 
 // Snapshot is not implemented.
-func (d *MysqlOperatorDatabase) Snapshot(store InstallationDatabaseStoreInterface, key, value string, logger log.FieldLogger) error {
+func (d *MysqlOperatorDatabase) Snapshot(logger log.FieldLogger) error {
 	return errors.New("not implemented")
 }
 
 // Restore is not implemented.
-func (d *MysqlOperatorDatabase) Restore(store InstallationDatabaseStoreInterface, key, value string, logger log.FieldLogger) error {
+func (d *MysqlOperatorDatabase) Restore(store InstallationDatabaseStoreInterface, clusterID string, logger log.FieldLogger) error {
 	return errors.New("not implemented")
 }
 
@@ -80,5 +78,5 @@ func (i *Installation) InternalDatabase() bool {
 
 // IsSupportedDatabase returns true if the given database string is supported.
 func IsSupportedDatabase(database string) bool {
-	return database == InstallationDatabaseMysqlOperator || database == InstallationDatabaseAwsRDS || database == InstallationMigrationDatabaseAwsRDS
+	return database == InstallationDatabaseMysqlOperator || database == InstallationDatabaseAwsRDS
 }
