@@ -1,10 +1,7 @@
 package aws
 
 import (
-	"context"
 	"fmt"
-	"sync"
-	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
@@ -17,20 +14,37 @@ import (
 )
 
 const (
-	AuroraMySQLEngineName             = "aurora-mysql"
-	AuroraMySQLEngineVersion          = "5.7"
-	RDSCustomParamGroupName           = "replication-aurora-mysql57"
-	RDSDefaultInstanceClass           = "db.r5.large"
-	RDSDefaultEngineMode              = "provisioned"
-	RDSDefaultDatabaseName            = "mattermost"
-	RDSDefaultSnapshotType            = "manual"
-	RDSStatusAvailable                = "available"
-	RDSStatusDeleting                 = "deleting"
-	RDSStatusCreating                 = "creating"
-	RDSStatusModifying                = "modifying"
-	RDSDefaultMySQLPort               = 3306
-	RDSDefaultSnapshotCreationTimeout = 10
+	AuroraMySQLEngineName    = "aurora-mysql"
+	AuroraMySQLEngineVersion = "5.7"
+	RDSCustomParamGroupName  = "replication-aurora-mysql57"
+	RDSDefaultInstanceClass  = "db.r5.large"
+	RDSDefaultEngineMode     = "provisioned"
+	RDSDefaultDatabaseName   = "mattermost"
+	RDSDefaultSnapshotType   = "manual"
+	RDSStatusAvailable       = "available"
+	RDSStatusDeleting        = "deleting"
+	RDSStatusCreating        = "creating"
+	RDSStatusModifying       = "modifying"
+	RDSDefaultMySQLPort      = 3306
 )
+
+// DBClusterSnapshot holds the information about the snapshot of a RDS database cluster.
+type DBClusterSnapshot struct {
+	SnapshotID string
+	Status     string
+}
+
+func (a *Client) SnapshotDBCluster(key, value string) error {
+
+}
+
+func (a *Client) GetDBClusterSnapshot(key, value string) (DBClusterSnapshot, error) {
+
+}
+
+func (a *Client) RestoreDBCluster(snapshot DBClusterSnapshot) error {
+
+}
 
 func (a *Client) rdsGetDBSecurityGroupIDs(vpcID string, logger log.FieldLogger) ([]string, error) {
 	svc := ec2.New(session.New(), &aws.Config{
@@ -125,6 +139,11 @@ func (a *Client) rdsEnsureDBClusterCreated(awsID, vpcID, username, password stri
 		return err
 	}
 
+	rdsTags := []*rds.Tag{&rds.Tag{
+		Key:   aws.String(""),
+		Value: aws.String(""),
+	}}
+
 	input := &rds.CreateDBClusterInput{
 		AvailabilityZones: []*string{
 			aws.String("us-east-1a"),
@@ -144,6 +163,7 @@ func (a *Client) rdsEnsureDBClusterCreated(awsID, vpcID, username, password stri
 		StorageEncrypted:            aws.Bool(false),
 		DBSubnetGroupName:           aws.String(dbSubnetGroupName),
 		VpcSecurityGroupIds:         aws.StringSlice(dbSecurityGroupIDs),
+		Tags:                        rdsTags,
 	}
 
 	_, err = svc.CreateDBCluster(input)
@@ -207,7 +227,7 @@ func rdsGetDBCluster(awsID string, logger log.FieldLogger) (*rds.DBCluster, erro
 	return result.DBClusters[0], nil
 }
 
-func rdsGetClustersByID(awsID string) (*rds.RDS, *rds.DBCluster, error) {
+func (a *Client) rdsEnsureDBClusterDeleted(awsID string, logger log.FieldLogger) error {
 	svc := rds.New(session.New(), &aws.Config{
 		Region: aws.String(DefaultAWSRegion),
 	})
@@ -216,23 +236,19 @@ func rdsGetClustersByID(awsID string) (*rds.RDS, *rds.DBCluster, error) {
 		DBClusterIdentifier: aws.String(awsID),
 	})
 	if err != nil {
-		return svc, nil, err
+		return err
 	}
 
 	if len(result.DBClusters) != 1 {
-		return svc, nil, fmt.Errorf("expected 1 DB cluster, but got %d", len(result.DBClusters))
+		return fmt.Errorf("expected 1 DB cluster, but got %d", len(result.DBClusters))
 	}
 
-	return svc, result.DBClusters[0], nil
-}
+	cluster := result.DBClusters[0]
 
-func (a *Client) rdsEnsureDBClusterDeleted(awsID string, logger log.FieldLogger) error {
-	svc, cluster, err := rdsGetClustersByID(awsID)
 	if err != nil {
 		if aerr, ok := err.(awserr.Error); ok {
 			if aerr.Code() == rds.ErrCodeDBClusterNotFoundFault {
 				logger.WithField("db-cluster-name", awsID).Warn("DBCluster could not be found; assuming already deleted")
-
 				return nil
 			}
 		}
@@ -263,84 +279,64 @@ func (a *Client) rdsEnsureDBClusterDeleted(awsID string, logger log.FieldLogger)
 	return nil
 }
 
-func (a *Client) createDBClusterSnapshot(ctx context.Context, awsID string, logger log.FieldLogger) (*rds.DBClusterSnapshot, error) {
+func (a *Client) rdsEnsureDBClusterSnapshotCreated(awsID, key, value string) error {
 	svc := rds.New(session.New(), &aws.Config{
 		Region: aws.String(DefaultAWSRegion),
 	})
 
-	output, err := svc.CreateDBClusterSnapshotWithContext(ctx, &rds.CreateDBClusterSnapshotInput{
+	_, err := svc.CreateDBClusterSnapshot(&rds.CreateDBClusterSnapshotInput{
 		DBClusterIdentifier:         aws.String(awsID),
 		DBClusterSnapshotIdentifier: aws.String(fmt.Sprintf("%s-snapshot-%s", awsID, model.NewID())),
+		Tags: []*rds.Tag{&rds.Tag{
+			Key:   aws.String(key),
+			Value: aws.String(value),
+		}},
 	})
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to create a DB cluster snapshot for replication")
+		return errors.Wrap(err, "failed to create a DB cluster snapshot for replication")
 	}
 
-	return output.DBClusterSnapshot, nil
+	return nil
 }
 
-// SnapshotStatusResult will signal when is done and it will contain either an error or the snapshot data.
-type SnapshotStatusResult struct {
-	snapshot *rds.DBClusterSnapshot
-	err      chan error
-	ok       chan struct{}
-	once     sync.Once
-}
-
-// Ok returns an read-only channel that will signal when the routine has finished.
-func (e *SnapshotStatusResult) Ok() <-chan struct{} {
-	return e.ok
-}
-
-// Err returns error if the routine failed, otherwise it returns nil.
-func (e *SnapshotStatusResult) Error() <-chan error {
-	return e.err
-}
-
-// Close closes done channel
-func (e *SnapshotStatusResult) close() {
-	e.once.Do(func() {
-		close(e.ok)
-	})
-}
-
-// ensureDBClusterSnapshotStatus periodically checks that a snapshot has reached a desirable state. Valid statuses: creating, available, deleting, modifying.
-func (a *Client) ensureDBClusterSnapshotStatus(ctx context.Context, snapshotID, snapshotStatus string, retryDelay time.Duration) *SnapshotStatusResult {
+func (a *Client) rdsGetDBClusterSnapshot(key, value string) (*rds.DBClusterSnapshot, error) {
 	svc := rds.New(session.New(), &aws.Config{
 		Region: aws.String(DefaultAWSRegion),
 	})
 
-	result := SnapshotStatusResult{
-		ok: make(chan struct{}),
+	dbClusterSnapshotsOut, err := svc.DescribeDBClusterSnapshots(&rds.DescribeDBClusterSnapshotsInput{
+		SnapshotType: aws.String(RDSDefaultSnapshotType),
+	})
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to describe RDS database cluster")
 	}
 
-	input := rds.DescribeDBClusterSnapshotsInput{
-		DBClusterSnapshotIdentifier: aws.String(snapshotID),
-	}
-
-	go func() {
-		for result.err == nil || result.snapshot == nil {
-			select {
-			case <-ctx.Done():
-				result.err <- errors.Wrapf(ctx.Err(), "cluster has not reached the desired snapshot status: %s", snapshotStatus)
-			default:
-				out, err := svc.DescribeDBClusterSnapshotsWithContext(ctx, &input)
-				if err != nil {
-					result.err <- errors.Wrapf(err, "cluster has not reached the desired snapshot status: %s", snapshotStatus)
+	var snapshots []*rds.DBClusterSnapshot
+	for _, snapshot := range dbClusterSnapshotsOut.DBClusterSnapshots {
+		listTagsForResourceOut, err := svc.ListTagsForResource(&rds.ListTagsForResourceInput{
+			ResourceName: snapshot.DBClusterSnapshotArn,
+		})
+		if err != nil {
+			return nil, err
+		}
+		for _, tag := range listTagsForResourceOut.TagList {
+			if *tag.Key == key {
+				if tag.Value != nil && *tag.Value == value {
+					snapshots = append(snapshots, snapshot)
 				}
-				if *out.DBClusterSnapshots[0].Status == snapshotStatus {
-					result.ok <- struct{}{}
-				}
-				<-time.After(retryDelay)
 			}
 		}
-	}()
+	}
 
-	return &result
+	length := len(snapshots)
+	if length != 1 {
+		return nil, errors.Errorf("only one snapshot should be associated with tag %s:%s, but found %v", key, value, length)
+	}
+
+	return snapshots[0], nil
 }
 
-// rdsEnsureDBClusterCreatedFromSnapshot requests RDS to restore a DB cluster from an specific snapshot
-func (a *Client) rdsEnsureDBClusterCreatedFromSnapshot(vpcID, awsID, snapshotID string, logger log.FieldLogger) error {
+func (a *Client) rdsEnsureRestoreDBClusterFromSnapshot(vpcID, awsID, snapshotID string, logger log.FieldLogger) error {
 	svc := rds.New(session.New(), &aws.Config{
 		Region: aws.String(DefaultAWSRegion),
 	})

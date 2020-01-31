@@ -9,8 +9,8 @@ import (
 
 // CreateClusterInstallationMigrationRequest specifies the parameters for migrating a cluster installation.
 type CreateClusterInstallationMigrationRequest struct {
-	ClusterID      string `json:"provider,omitempty"`
-	InstallationID string `json:"version,omitempty"`
+	ClusterID             string `json:"provider,omitempty"`
+	ClusterInstallationID string `json:"version,omitempty"`
 }
 
 // NewCreateClusterInstallationMigrationRequestFromReader will create a CreateMigrationRequest from an

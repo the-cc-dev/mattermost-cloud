@@ -2,6 +2,7 @@ package model
 
 import (
 	mmv1alpha1 "github.com/mattermost/mattermost-operator/pkg/apis/mattermost/v1alpha1"
+	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
 )
@@ -18,6 +19,8 @@ const (
 // Database is the interface for managing Mattermost databases.
 type Database interface {
 	Provision(store InstallationDatabaseStoreInterface, logger log.FieldLogger) error
+	Snapshot(store InstallationDatabaseStoreInterface, key, value string, logger log.FieldLogger) error
+	Restore(store InstallationDatabaseStoreInterface, key, value string, logger log.FieldLogger) error
 	Teardown(keepData bool, logger log.FieldLogger) error
 	GenerateDatabaseSpecAndSecret(logger log.FieldLogger) (*mmv1alpha1.Database, *corev1.Secret, error)
 }
@@ -34,6 +37,16 @@ type MysqlOperatorDatabase struct{}
 // NewMysqlOperatorDatabase returns a new MysqlOperatorDatabase interface.
 func NewMysqlOperatorDatabase() *MysqlOperatorDatabase {
 	return &MysqlOperatorDatabase{}
+}
+
+// Snapshot is not implemented.
+func (d *MysqlOperatorDatabase) Snapshot(store InstallationDatabaseStoreInterface, key, value string, logger log.FieldLogger) error {
+	return errors.New("not implemented")
+}
+
+// Restore is not implemented.
+func (d *MysqlOperatorDatabase) Restore(store InstallationDatabaseStoreInterface, key, value string, logger log.FieldLogger) error {
+	return errors.New("not implemented")
 }
 
 // Provision completes all the steps necessary to provision a MySQL operator database.

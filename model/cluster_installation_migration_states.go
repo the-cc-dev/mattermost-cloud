@@ -5,9 +5,24 @@ const (
 	ClusterInstallationMigrationStateStable = "stable"
 	// ClusterInstallationMigrationStateCreationRequested is an InstallationMigration waiting to be created.
 	ClusterInstallationMigrationStateCreationRequested = "creation-requested"
-	// ClusterInstallationMigrationStateCreationInProgress is an InstallationMigration in the process of
-	// being created.
+	// ClusterInstallationMigrationStateCreateSnapshot creates a snapshot of the cluster installation's database.
+	ClusterInstallationMigrationStateCreateSnapshot = "create-snapshot"
+	// ClusterInstallationMigrationStateSnapshotCreationIP indicates that the snapshot is being created.
+	ClusterInstallationMigrationStateSnapshotCreationIP = "snapshot-creation-in-progress"
+	// ClusterInstallationMigrationStateClusterInstallationCreationIP indicates that a new cluster installation is being created.
+	ClusterInstallationMigrationStateClusterInstallationCreationIP = "cluster-installation-in-progress"
+	// ClusterInstallationMigrationStateWaitForSnapshot waits while the snapshot is being created.
+	ClusterInstallationMigrationStateWaitForSnapshot = "waiting-for-snapshot"
+	// ClusterInstallationMigrationStateWaitForCluesterInstallation requests a new cluster installation.
+	ClusterInstallationMigrationStateWaitForCluesterInstallation = "wait-for-cluster-installation"
+	// ClusterInstallationMigrationStateCreationInProgress is an InstallationMigration in the process of being created.
 	ClusterInstallationMigrationStateCreationInProgress = "creation-in-progress"
+	// ClusterInstallationMigrationStateClusterInstallationCreated indicates that a new cluster installation was created.
+	ClusterInstallationMigrationStateClusterInstallationCreated = "cluster-installation-created"
+	// ClusterInstallationMigrationStateRestoreDatabase indicates that a new cluster installation was created.
+	ClusterInstallationMigrationStateRestoreDatabase = "restore-database"
+	// ClusterInstallationMigrationStateRestoreDatabaseIP indicates that a database is being restored.
+	ClusterInstallationMigrationStateRestoreDatabaseIP = "restore-database-in-progress"
 	// ClusterInstallationMigrationStateCreationFailed is an InstallationMigration that failed creation.
 	ClusterInstallationMigrationStateCreationFailed = "creation-failed"
 )
@@ -32,12 +47,12 @@ var AllClusterInstallationMigrationStatesPendingWork = []string{
 	ClusterInstallationMigrationStateCreationInProgress,
 }
 
-// AllMigrationRequestStates is a list of all states that an InstallationMigration can
+// AllClusterInstallationMigrationRequestStates is a list of all states that an InstallationMigration can
 // be put in via the API.
 // Warning:
 // When creating a new InstallationMigration state, it must be added to this list if an
 // API endpoint should put the InstallationMigration in this state.
-var AllMigrationRequestStates = []string{
+var AllClusterInstallationMigrationRequestStates = []string{
 	ClusterInstallationMigrationStateCreationRequested,
 }
 

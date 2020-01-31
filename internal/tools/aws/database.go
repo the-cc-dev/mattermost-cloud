@@ -1,9 +1,7 @@
 package aws
 
 import (
-	"context"
 	"fmt"
-	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/ec2"
@@ -18,17 +16,17 @@ import (
 
 // RDSDatabase is a database backed by AWS RDS.
 type RDSDatabase struct {
-	installationID       string
-	parentInstallationID string
+	installationID string
 }
 
-// NewRDSDatabaseMigration returns a new RDSDatabase interface.
-func NewRDSDatabaseMigration(installationID, parentInstallationID string) *RDSDatabase {
-	return &RDSDatabase{
-		installationID:       installationID,
-		parentInstallationID: parentInstallationID,
-	}
-}
+const (
+	// RDSErrorSnapshotCreating ...
+	RDSErrorSnapshotCreating = "rds database snapshot is being created"
+	// RDSErrorSnapshotDeleting ...
+	RDSErrorSnapshotDeleting = "rds database snapshot is being deleted"
+	// RDSErrorSnapshotModifying ...
+	RDSErrorSnapshotModifying = "rds database snapshot is being modified"
+)
 
 // NewRDSDatabase returns a new RDSDatabase interface.
 func NewRDSDatabase(installationID string) *RDSDatabase {
@@ -37,69 +35,83 @@ func NewRDSDatabase(installationID string) *RDSDatabase {
 	}
 }
 
-// Provision completes all the steps necessary to provision a RDS database.
-func (d *RDSDatabase) Provision(store model.InstallationDatabaseStoreInterface, logger log.FieldLogger) error {
+// Snapshot ...
+func (d *RDSDatabase) Snapshot(key, value string) error {
+	awsClient := New()
+	err := awsClient.rdsEnsureDBClusterSnapshotCreated(CloudID(d.installationID), key, value)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// Restore ...
+func (d *RDSDatabase) Restore(store model.InstallationDatabaseStoreInterface, key, value string, logger log.FieldLogger) error {
 	awsClient := New()
 	awsClient.AddSQLStore(store)
 
 	awsID := CloudID(d.installationID)
-	logger.Infof("Provisioning AWS RDS cluster with ID %s", awsID)
 
 	vpcID, err := getVpcID(d.installationID, awsClient, logger)
 	if err != nil {
 		return errors.Wrap(err, "unable to get resources required for provisioning an RDS database")
 	}
 
-	masterInstanceName := fmt.Sprintf("%s-master", awsID)
-
-	if d.parentInstallationID == "" {
-		rdsSecret, err := awsClient.secretsManagerEnsureRDSSecretCreated(awsID, logger)
-		if err != nil {
-			return err
-		}
-
-		err = awsClient.rdsEnsureDBClusterCreated(awsID, vpcID, rdsSecret.MasterUsername, rdsSecret.MasterPassword, logger)
-		if err != nil {
-			return err
-		}
-	} else {
-		// TODO(gsagula): If we want to wait for the snapshot here, modify Provision interface to take a context.
-		ctx := context.Background()
-		awsParentID := CloudID(d.parentInstallationID)
-
-		logger.Infof("snapshotting RDS Database: %s. This may take several minutes depending on the size of the database.", awsParentID)
-		out, err := awsClient.createDBClusterSnapshot(ctx, awsParentID, logger)
-		if err != nil {
-			return err
-		}
-
-		ctx, cancel := context.WithTimeout(ctx, 60*time.Minute)
-		defer cancel()
-
-		status := awsClient.ensureDBClusterSnapshotStatus(ctx, *out.DBClusterSnapshotIdentifier, RDSStatusAvailable, 30*time.Second)
-		defer status.close()
-		for {
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-
-			case <-status.Ok():
-				err = awsClient.rdsEnsureDBClusterCreatedFromSnapshot(vpcID, awsID, *out.DBClusterSnapshotIdentifier, logger)
-				if err != nil {
-					return err
-				}
-				break
-
-			case err := <-status.Error():
-				return err
-
-			default:
-				logger.Debugf("provisioner is still snapshotting the RDS Database: %s", awsParentID)
-			}
-		}
+	snapshot, err := awsClient.rdsGetDBClusterSnapshot(key, value)
+	if err != nil {
+		return errors.Wrap(err, "unable to restore RDS database from snapshot")
 	}
 
-	err = awsClient.rdsEnsureDBClusterInstanceCreated(awsID, masterInstanceName, logger)
+	switch *snapshot.Status {
+	case RDSStatusAvailable:
+		err = awsClient.rdsEnsureRestoreDBClusterFromSnapshot(vpcID, awsID, *snapshot.DBClusterSnapshotIdentifier, logger)
+		if err != nil {
+			return errors.Wrapf(err, "unable to restore RDS database cluster from snapshot %s", snapshot.DBClusterSnapshotIdentifier)
+		}
+		err = awsClient.rdsEnsureDBClusterInstanceCreated(awsID, fmt.Sprintf("%s-master", awsID), logger)
+		if err != nil {
+			return errors.Wrapf(err, "unable to restore RDS database instance from snapshot %s", snapshot.DBClusterSnapshotIdentifier)
+		}
+
+	case RDSStatusCreating:
+		return errors.New(RDSErrorSnapshotCreating)
+
+	case RDSStatusModifying:
+		return errors.New(RDSErrorSnapshotModifying)
+
+	case RDSStatusDeleting:
+		return errors.New(RDSErrorSnapshotDeleting)
+
+	default:
+		return errors.Errorf("unknown snapshot status %s", *snapshot.Status)
+	}
+
+	return nil
+}
+
+// Provision completes all the steps necessary to provision a RDS database.
+func (d *RDSDatabase) Provision(store model.InstallationDatabaseStoreInterface, logger log.FieldLogger) error {
+	awsClient := New()
+	awsClient.AddSQLStore(store)
+
+	awsID := CloudID(d.installationID)
+
+	vpcID, err := getVpcID(d.installationID, awsClient, logger)
+	if err != nil {
+		return errors.Wrap(err, "unable to get resources required for provisioning an RDS database")
+	}
+
+	rdsSecret, err := awsClient.secretsManagerEnsureRDSSecretCreated(awsID, logger)
+	if err != nil {
+		return err
+	}
+	err = awsClient.rdsEnsureDBClusterCreated(awsID, vpcID, rdsSecret.MasterUsername, rdsSecret.MasterPassword, logger)
+	if err != nil {
+		return err
+	}
+
+	err = awsClient.rdsEnsureDBClusterInstanceCreated(awsID, fmt.Sprintf("%s-master", awsID), logger)
 	if err != nil {
 		return err
 	}
