@@ -44,7 +44,16 @@ var AllClusterInstallationMigrationStates = []string{
 // cloud InstallationMigration supervisor should perform some action on its next work cycle.
 var AllClusterInstallationMigrationStatesPendingWork = []string{
 	ClusterInstallationMigrationStateCreationRequested,
+	ClusterInstallationMigrationStateCreateSnapshot,
+	ClusterInstallationMigrationStateSnapshotCreationIP,
+	ClusterInstallationMigrationStateClusterInstallationCreationIP,
+	ClusterInstallationMigrationStateWaitForSnapshot,
+	ClusterInstallationMigrationStateWaitForCluesterInstallation,
 	ClusterInstallationMigrationStateCreationInProgress,
+	ClusterInstallationMigrationStateClusterInstallationCreated,
+	ClusterInstallationMigrationStateRestoreDatabase,
+	ClusterInstallationMigrationStateRestoreDatabaseIP,
+	ClusterInstallationMigrationStateRestoreDatabaseIP,
 }
 
 // AllClusterInstallationMigrationRequestStates is a list of all states that an InstallationMigration can
@@ -54,25 +63,4 @@ var AllClusterInstallationMigrationStatesPendingWork = []string{
 // API endpoint should put the InstallationMigration in this state.
 var AllClusterInstallationMigrationRequestStates = []string{
 	ClusterInstallationMigrationStateCreationRequested,
-}
-
-// ValidTransitionState returns whether an InstallationMigration can be transitioned into
-// the new state or not based on its current state.
-func (i *ClusterInstallationMigration) ValidTransitionState(newState string) bool {
-	switch newState {
-	case ClusterInstallationMigrationStateCreationRequested:
-		return validTransitionToClusterInstallationMigrationStateCreationRequested(i.State)
-	}
-
-	return false
-}
-
-func validTransitionToClusterInstallationMigrationStateCreationRequested(currentState string) bool {
-	switch currentState {
-	case ClusterInstallationMigrationStateCreationRequested,
-		ClusterInstallationMigrationStateCreationFailed:
-		return true
-	}
-
-	return false
 }

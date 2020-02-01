@@ -16,10 +16,10 @@ type clusterInstallationMigrationLock struct {
 	logger      log.FieldLogger
 }
 
-func newClusterInstallationMigrationLock(migrationID, clusterID string, store clusterInstallationMigrationLockStore, logger log.FieldLogger) *clusterInstallationMigrationLock {
+func newClusterInstallationMigrationLock(migrationID, lockerID string, store clusterInstallationMigrationLockStore, logger log.FieldLogger) *clusterInstallationMigrationLock {
 	return &clusterInstallationMigrationLock{
 		migrationID: migrationID,
-		lockerID:    clusterID,
+		lockerID:    lockerID,
 		store:       store,
 		logger:      logger,
 	}
@@ -38,8 +38,8 @@ func (l *clusterInstallationMigrationLock) TryLock() bool {
 func (l *clusterInstallationMigrationLock) Unlock() {
 	unlocked, err := l.store.UnlockClusterInstallationMigration(l.migrationID, l.lockerID, false)
 	if err != nil {
-		l.logger.WithError(err).Error("failed to unlock migration")
+		l.logger.WithError(err).Error("failed to unlock cluster installation migration")
 	} else if unlocked != true {
-		l.logger.Error("failed to release lock for migration")
+		l.logger.Error("failed to release cluster installation migration locker")
 	}
 }

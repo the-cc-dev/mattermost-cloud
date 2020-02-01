@@ -127,11 +127,6 @@ func (a *Client) rdsEnsureDBClusterCreated(awsID, vpcID, username, password stri
 		return err
 	}
 
-	rdsTags := []*rds.Tag{&rds.Tag{
-		Key:   aws.String(""),
-		Value: aws.String(""),
-	}}
-
 	input := &rds.CreateDBClusterInput{
 		AvailabilityZones: []*string{
 			aws.String("us-east-1a"),
@@ -151,7 +146,6 @@ func (a *Client) rdsEnsureDBClusterCreated(awsID, vpcID, username, password stri
 		StorageEncrypted:            aws.Bool(false),
 		DBSubnetGroupName:           aws.String(dbSubnetGroupName),
 		VpcSecurityGroupIds:         aws.StringSlice(dbSecurityGroupIDs),
-		Tags:                        rdsTags,
 	}
 
 	_, err = svc.CreateDBCluster(input)

@@ -56,12 +56,12 @@ func (sqlStore *SQLStore) GetUnlockedClusterInstallationMigrationsPendingWork() 
 
 // LockClusterInstallationMigration marks the installation as locked for exclusive use by the caller.
 func (sqlStore *SQLStore) LockClusterInstallationMigration(migrationID, lockerID string) (bool, error) {
-	return sqlStore.lockRows("ClusterInstallationMigration", []string{migrationID}, lockerID)
+	return sqlStore.lockRows(clusterInstallationMigrationTable, []string{migrationID}, lockerID)
 }
 
 // UnlockClusterInstallationMigration releases a lock previously acquired against a caller.
 func (sqlStore *SQLStore) UnlockClusterInstallationMigration(migrationID, lockerID string, force bool) (bool, error) {
-	return sqlStore.unlockRows("ClusterInstallationMigration", []string{migrationID}, lockerID, force)
+	return sqlStore.unlockRows(clusterInstallationMigrationTable, []string{migrationID}, lockerID, force)
 }
 
 // GetClusterInstallationMigrations fetches the given page of created cluster installation migration. The first page is 0.
