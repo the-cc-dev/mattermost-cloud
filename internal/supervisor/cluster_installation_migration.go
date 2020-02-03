@@ -106,10 +106,12 @@ func (s *ClusterInstallationMigrationSupervisor) transitionClusterInstallationMi
 		return s.createClusterInstallationSnapshot(migration, logger)
 	case model.ClusterInstallationMigrationStateSnapshotCreationIP:
 		return s.createClusterInstallation(migration, logger)
-	// case model.ClusterInstallationMigrationStateClusterInstallationCreationIP:
-	// 	return s.waitForClusterInstallation(migration, logger)
+	case model.ClusterInstallationMigrationStateClusterInstallationCreationIP:
+		return s.waitForClusterInstallation(migration, logger)
 	// case model.ClusterInstallationMigrationStateClusterInstallationCreated:
 	// 	return s.restoreDatabase(migration, logger)
+
+	// TODO(gsagula): restore from snapshot, setup binlog and start replication
 
 	default:
 		logger.Warnf("Found installation pending work in unexpected state %s", migration.State)
@@ -233,49 +235,46 @@ func (s *ClusterInstallationMigrationSupervisor) createClusterInstallation(migra
 	return model.ClusterInstallationMigrationStateClusterInstallationCreationIP
 }
 
-// func (s *ClusterInstallationMigrationSupervisor) waitForClusterInstallation(migration *model.ClusterInstallationMigration,
-// 	logger log.FieldLogger) string {
+func (s *ClusterInstallationMigrationSupervisor) waitForClusterInstallation(migration *model.ClusterInstallationMigration,
+	logger log.FieldLogger) string {
 
-// 	clusterInstallationMigration, err := s.store.GetClusterInstallationMigration(migration.ID)
-// 	if err != nil {
-// 		return model.ClusterInstallationMigrationStateCreationFailed
-// 	}
-// 	if clusterInstallationMigration.State != model.ClusterInstallationMigrationStateClusterInstallationCreationIP {
-// 		return model.ClusterInstallationMigrationStateCreationFailed
-// 	}
+	clusterInstallationMigration, err := s.store.GetClusterInstallationMigration(migration.ID)
+	if err != nil {
+		logger.Errorf("failed to retrieve cluster installation migration: %s", err.Error())
+		return model.ClusterInstallationMigrationStateCreationFailed
+	}
+	if clusterInstallationMigration.State != model.ClusterInstallationMigrationStateSnapshotCreationIP {
+		return model.ClusterInstallationMigrationStateCreationFailed
+	}
 
-// 	clusterInstallation, err := s.clusterInstallationSupervisor.store.GetClusterInstallation(migration.ClusterInstallationID)
-// 	if err != nil {
-// 		return model.ClusterInstallationMigrationStateCreationFailed
-// 	}
+	clusterInstallation, err := s.clusterInstallationSupervisor.store.GetClusterInstallation(migration.ClusterInstallationID)
+	if err != nil {
+		logger.Errorf("failed to retrieve cluster installation migration: %s", err.Error())
+		return model.ClusterInstallationMigrationStateCreationFailed
+	}
 
-// 	installation, err := s.installationSupervisor.store.GetInstallation(clusterInstallation.InstallationID)
-// 	if err != nil {
-// 		return model.ClusterInstallationMigrationStateCreationFailed
-// 	}
+	installation, err := s.installationSupervisor.store.GetInstallation(clusterInstallation.InstallationID)
+	if err != nil {
+		logger.Errorf("failed to retrieve installation: %s", err.Error())
+		return model.ClusterInstallationMigrationStateCreationFailed
+	}
 
-// 	clusterInstallations, err := s.installationSupervisor.store.GetClusterInstallations(&model.ClusterInstallationFilter{
-// 		ClusterID:      migration.ClusterID,
-// 		InstallationID: installation.ID,
-// 		IncludeDeleted: false,
-// 	})
-// 	if err != nil || len(clusterInstallations) != 1 {
-// 		return model.ClusterInstallationMigrationStateCreationFailed
-// 	}
+	clusterInstallations, err := s.installationSupervisor.store.GetClusterInstallations(&model.ClusterInstallationFilter{
+		ClusterID:      migration.ClusterID,
+		InstallationID: installation.ID,
+		IncludeDeleted: false,
+	})
+	if err != nil || len(clusterInstallations) != 1 {
+		return model.ClusterInstallationMigrationStateCreationFailed
+	}
 
-// 	if clusterInstallations[0].State != model.ClusterInstallationStateStable {
-// 		return migration.State
-// 	}
+	if clusterInstallations[0].State != model.ClusterInstallationStateStable {
+		logger.Debug("still waiting on cluster installation to become stable")
+		return migration.State
+	}
 
-// 	// Change state to cluster installation creation in progress.
-// 	migration.State = model.ClusterInstallationMigrationStateClusterInstallationCreated
-// 	err = s.store.UpdateClusterInstallationMigration(migration)
-// 	if err != nil {
-// 		return model.ClusterInstallationMigrationStateCreationFailed
-// 	}
-
-// 	return migration.State
-// }
+	return model.ClusterInstallationMigrationStateClusterInstallationCreated
+}
 
 // func (s *ClusterInstallationMigrationSupervisor) restoreDatabase(migration *model.ClusterInstallationMigration,
 // 	logger log.FieldLogger) string {
