@@ -1,6 +1,7 @@
 package model
 
 import (
+	"github.com/mattermost/mattermost-cloud/model"
 	mmv1alpha1 "github.com/mattermost/mattermost-operator/pkg/apis/mattermost/v1alpha1"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
@@ -12,15 +13,22 @@ const (
 	InstallationDatabaseMysqlOperator = "mysql-operator"
 	// InstallationDatabaseAwsRDS is a database hosted via Amazon RDS.
 	InstallationDatabaseAwsRDS = "aws-rds"
+	// DatabaseStatusFailing describes a database failing status.
+	DatabaseStatusFailing = "failing"
+	// DatabaseStatusReady describes a database ready status.
+	DatabaseStatusReady = "ready"
+	// DatabaseStatusNotReady describes a database no ready status.
+	DatabaseStatusNotReady = "not-ready"
 )
 
 // Database is the interface for managing Mattermost databases.
 type Database interface {
 	Provision(store InstallationDatabaseStoreInterface, logger log.FieldLogger) error
-	Snapshot(logger log.FieldLogger) error
-	Restore(store InstallationDatabaseStoreInterface, clusterID string, logger log.FieldLogger) error
+	Restore(store InstallationDatabaseStoreInterface, clusterInstallation *model.ClusterInstallation, logger log.FieldLogger) error
 	Teardown(keepData bool, logger log.FieldLogger) error
 	GenerateDatabaseSpecAndSecret(logger log.FieldLogger) (*mmv1alpha1.Database, *corev1.Secret, error)
+	Status() (string, error)
+	Snapshot() error
 }
 
 // InstallationDatabaseStoreInterface is the interface necessary for SQLStore
@@ -38,12 +46,17 @@ func NewMysqlOperatorDatabase() *MysqlOperatorDatabase {
 }
 
 // Snapshot is not implemented.
-func (d *MysqlOperatorDatabase) Snapshot(logger log.FieldLogger) error {
+func (d *MysqlOperatorDatabase) Snapshot() error {
 	return errors.New("not implemented")
 }
 
+// Status is not implemented.
+func (d *MysqlOperatorDatabase) Status() (string, error) {
+	return "", errors.New("not implemented")
+}
+
 // Restore is not implemented.
-func (d *MysqlOperatorDatabase) Restore(store InstallationDatabaseStoreInterface, clusterID string, logger log.FieldLogger) error {
+func (d *MysqlOperatorDatabase) Restore(store InstallationDatabaseStoreInterface, clusterInstallation *model.ClusterInstallation, logger log.FieldLogger) error {
 	return errors.New("not implemented")
 }
 

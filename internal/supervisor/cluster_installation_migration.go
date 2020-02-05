@@ -1,6 +1,7 @@
 package supervisor
 
 import (
+	"github.com/mattermost/mattermost-cloud/internal/tools/aws"
 	awstools "github.com/mattermost/mattermost-cloud/internal/tools/aws"
 	"github.com/mattermost/mattermost-cloud/internal/tools/utils"
 	"github.com/mattermost/mattermost-cloud/model"
@@ -150,6 +151,11 @@ func (s *ClusterInstallationMigrationSupervisor) createClusterInstallationMigrat
 		return model.ClusterInstallationMigrationStateCreationFailed
 	}
 
+	if installation.Database != model.InstallationDatabaseAwsRDS {
+		logger.Errorf("migration failed: database %s is not supported", installation.Database)
+		return model.ClusterInstallationMigrationStateCreationFailed
+	}
+
 	if installation.LockAcquiredBy == nil {
 		installationLocked, err := s.installationSupervisor.store.LockInstallation(installation.ID, clusterInstallationMigration.ID)
 		if err != nil {
@@ -180,7 +186,7 @@ func (s *ClusterInstallationMigrationSupervisor) createClusterInstallationSnapsh
 		return model.ClusterInstallationMigrationStateCreationFailed
 	}
 
-	err = utils.GetDatabase(installation).Snapshot(logger)
+	err = utils.GetDatabase(installation).Snapshot()
 	if err != nil {
 		logger.Errorf("failed to create a snapshot of the database: %s", err.Error())
 		return model.ClusterInstallationMigrationStateCreationFailed
@@ -276,57 +282,52 @@ func (s *ClusterInstallationMigrationSupervisor) waitForClusterInstallation(migr
 	return model.ClusterInstallationMigrationStateClusterInstallationCreated
 }
 
-// func (s *ClusterInstallationMigrationSupervisor) restoreDatabase(migration *model.ClusterInstallationMigration,
-// 	logger log.FieldLogger) string {
+func (s *ClusterInstallationMigrationSupervisor) restoreDatabase(migration *model.ClusterInstallationMigration,
+	logger log.FieldLogger) string {
 
-// 	clusterInstallationMigration, err := s.store.GetClusterInstallationMigration(migration.ID)
-// 	if err != nil {
-// 		return model.ClusterInstallationMigrationStateCreationFailed
-// 	}
-// 	if clusterInstallationMigration.State != model.ClusterInstallationMigrationStateClusterInstallationCreationIP {
-// 		return model.ClusterInstallationMigrationStateCreationFailed
-// 	}
+	clusterInstallationMigration, err := s.store.GetClusterInstallationMigration(migration.ID)
+	if err != nil {
+		return model.ClusterInstallationMigrationStateCreationFailed
+	}
+	if clusterInstallationMigration.State != model.ClusterInstallationMigrationStateClusterInstallationCreationIP {
+		return model.ClusterInstallationMigrationStateCreationFailed
+	}
 
-// 	clusterInstallation, err := s.clusterInstallationSupervisor.store.GetClusterInstallation(migration.ClusterInstallationID)
-// 	if err != nil {
-// 		return model.ClusterInstallationMigrationStateCreationFailed
-// 	}
+	clusterInstallation, err := s.clusterInstallationSupervisor.store.GetClusterInstallation(migration.ClusterInstallationID)
+	if err != nil {
+		return model.ClusterInstallationMigrationStateCreationFailed
+	}
 
-// 	installation, err := s.installationSupervisor.store.GetInstallation(clusterInstallation.InstallationID)
-// 	if err != nil {
-// 		return model.ClusterInstallationMigrationStateCreationFailed
-// 	}
+	installation, err := s.installationSupervisor.store.GetInstallation(clusterInstallation.InstallationID)
+	if err != nil {
+		return model.ClusterInstallationMigrationStateCreationFailed
+	}
 
-// 	clusterInstallations, err := s.installationSupervisor.store.GetClusterInstallations(&model.ClusterInstallationFilter{
-// 		ClusterID:      migration.ClusterID,
-// 		InstallationID: installation.ID,
-// 		IncludeDeleted: false,
-// 	})
-// 	if err != nil || len(clusterInstallations) != 1 {
-// 		return model.ClusterInstallationMigrationStateCreationFailed
-// 	}
-// 	if clusterInstallations[0].State != model.ClusterInstallationStateStable {
-// 		return model.ClusterInstallationMigrationStateCreationFailed
-// 	}
+	clusterInstallations, err := s.installationSupervisor.store.GetClusterInstallations(&model.ClusterInstallationFilter{
+		ClusterID:      migration.ClusterID,
+		InstallationID: installation.ID,
+		IncludeDeleted: false,
+	})
+	if err != nil || len(clusterInstallations) != 1 {
+		return model.ClusterInstallationMigrationStateCreationFailed
+	}
+	if clusterInstallations[0].State != model.ClusterInstallationStateStable {
+		return model.ClusterInstallationMigrationStateCreationFailed
+	}
 
-// 	err = utils.GetDatabase(installation).Restore(s.installationSupervisor.store, migration.ClusterID, logger)
-// 	if err != nil {
-// 		switch err.Error() {
-// 		case aws.RDSErrorSnapshotCreating:
-// 			return migration.State
-// 		case aws.RDSErrorSnapshotModifying:
-// 			return migration.State
-// 		default:
-// 			return model.ClusterInstallationMigrationStateCreationFailed
-// 		}
-// 	}
+	database := aws.NewRDSDatabaseClusterInstallation(migration.ClusterID, installation.ID)
+	err = database.Restore(s.installationSupervisor.store, logger)
+	if err != nil {
+		switch err.Error() {
+		case aws.RDSErrorSnapshotCreating:
+			return migration.State
+		case aws.RDSErrorSnapshotModifying:
+			return migration.State
+		default:
+			logger.Errorf("failed to restore database: %s", err.Error())
+			return model.ClusterInstallationMigrationStateCreationFailed
+		}
+	}
 
-// 	// Change state to cluster installation creation in progress.
-// 	migration.State = model.ClusterInstallationMigrationStateClusterInstallationCreated
-// 	err = s.store.UpdateClusterInstallationMigration(migration)
-// 	if err != nil {
-// 		return model.ClusterInstallationMigrationStateCreationFailed
-// 	}
-
-// 	return migration.State
-// }
+	return model.ClusterInstallationMigrationStateRestoreDatabaseIP
+}

@@ -278,69 +278,31 @@ func (a *Client) rdsEnsureDBClusterSnapshotCreated(awsID string, tags []*rds.Tag
 	return nil
 }
 
-func (a *Client) rdsGetSnapshotTagsMap(filter []*rds.Filter) (*map[*rds.DBClusterSnapshot][]*rds.Tag, error) {
+func (a *Client) describeDBClusterSnapshots(input *rds.DescribeDBClusterSnapshotsInput) (*rds.DescribeDBClusterSnapshotsOutput, error) {
 	svc := rds.New(session.New(), &aws.Config{
 		Region: aws.String(DefaultAWSRegion),
 	})
 
-	dbClusterSnapshotsOut, err := svc.DescribeDBClusterSnapshots(&rds.DescribeDBClusterSnapshotsInput{
-		SnapshotType: aws.String(RDSDefaultSnapshotType),
-	})
+	dbClusterSnapshotsOut, err := svc.DescribeDBClusterSnapshots(input)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to describe RDS database cluster")
+		return nil, err
 	}
 
-	snapshotTagListMap := make(map[*rds.DBClusterSnapshot][]*rds.Tag, len(dbClusterSnapshotsOut.DBClusterSnapshots))
-	for _, snapshot := range dbClusterSnapshotsOut.DBClusterSnapshots {
-		listTagsForResourceOut, err := svc.ListTagsForResource(&rds.ListTagsForResourceInput{
-			ResourceName: snapshot.DBClusterSnapshotArn,
-			Filters:      filter,
-		})
-		if err != nil {
-			return nil, err
-		}
-		snapshotTagListMap[snapshot] = listTagsForResourceOut.TagList
-	}
-
-	return &snapshotTagListMap, nil
+	return dbClusterSnapshotsOut, nil
 }
 
-// func (a *Client) rdsGetDBClusterSnapshot(key, value string) (*rds.DBClusterSnapshot, error) {
-// 	svc := rds.New(session.New(), &aws.Config{
-// 		Region: aws.String(DefaultAWSRegion),
-// 	})
+func (a *Client) listTagsForResource(input *rds.ListTagsForResourceInput) (*rds.ListTagsForResourceOutput, error) {
+	svc := rds.New(session.New(), &aws.Config{
+		Region: aws.String(DefaultAWSRegion),
+	})
 
-// 	dbClusterSnapshotsOut, err := svc.DescribeDBClusterSnapshots(&rds.DescribeDBClusterSnapshotsInput{
-// 		SnapshotType: aws.String(RDSDefaultSnapshotType),
-// 	})
-// 	if err != nil {
-// 		return nil, errors.Wrap(err, "failed to describe RDS database cluster")
-// 	}
+	listTagsForResourceOut, err := svc.ListTagsForResource(input)
+	if err != nil {
+		return nil, err
+	}
 
-// 	var snapshots []*rds.DBClusterSnapshot
-// 	for _, snapshot := range dbClusterSnapshotsOut.DBClusterSnapshots {
-// 		listTagsForResourceOut, err := svc.ListTagsForResource(&rds.ListTagsForResourceInput{
-// 			ResourceName: snapshot.DBClusterSnapshotArn,
-// 		})
-// 		if err != nil {
-// 			return nil, err
-// 		}
-// 		for _, tag := range listTagsForResourceOut.TagList {
-// 			if *tag.Key == key {
-// 				if tag.Value != nil && *tag.Value == value {
-// 					snapshots = append(snapshots, snapshot)
-// 				}
-// 			}
-// 		}
-// 	}
-
-// 	length := len(snapshots)
-// 	if length != 1 {
-// 		return nil, errors.Errorf("only one snapshot should be associated with tag %s:%s, but found %v", key, value, length)
-// 	}
-
-// 	return snapshots[0], nil
-// }
+	return listTagsForResourceOut, nil
+}
 
 func (a *Client) rdsEnsureRestoreDBClusterFromSnapshot(vpcID, awsID, snapshotID string, logger log.FieldLogger) error {
 	svc := rds.New(session.New(), &aws.Config{
@@ -379,4 +341,17 @@ func (a *Client) rdsEnsureRestoreDBClusterFromSnapshot(vpcID, awsID, snapshotID 
 	}
 
 	return nil
+}
+
+func (a *Client) describeDBClusterEndpoints(input *rds.DescribeDBClusterEndpointsInput) (*rds.DescribeDBClusterEndpointsOutput, error) {
+	svc := rds.New(session.New(), &aws.Config{
+		Region: aws.String(DefaultAWSRegion),
+	})
+
+	dbClusterEndpointsOutput, err := svc.DescribeDBClusterEndpoints(input)
+	if err != nil {
+		return nil, err
+	}
+
+	return dbClusterEndpointsOutput, nil
 }
