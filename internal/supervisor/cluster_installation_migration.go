@@ -1,7 +1,6 @@
 package supervisor
 
 import (
-	"github.com/mattermost/mattermost-cloud/internal/tools/aws"
 	awstools "github.com/mattermost/mattermost-cloud/internal/tools/aws"
 	"github.com/mattermost/mattermost-cloud/internal/tools/utils"
 	"github.com/mattermost/mattermost-cloud/model"
@@ -107,12 +106,10 @@ func (s *ClusterInstallationMigrationSupervisor) transitionClusterInstallationMi
 		return s.createClusterInstallationSnapshot(migration, logger)
 	case model.ClusterInstallationMigrationStateSnapshotCreationIP:
 		return s.createClusterInstallation(migration, logger)
+	case model.ClusterInstallationMigrationStateClusterInstallationCreated:
+		return s.restoreDatabase(migration, logger)
 	case model.ClusterInstallationMigrationStateClusterInstallationCreationIP:
 		return s.waitForClusterInstallation(migration, logger)
-	// case model.ClusterInstallationMigrationStateClusterInstallationCreated:
-	// 	return s.restoreDatabase(migration, logger)
-
-	// TODO(gsagula): restore from snapshot, setup binlog and start replication
 
 	default:
 		logger.Warnf("Found installation pending work in unexpected state %s", migration.State)
@@ -186,7 +183,7 @@ func (s *ClusterInstallationMigrationSupervisor) createClusterInstallationSnapsh
 		return model.ClusterInstallationMigrationStateCreationFailed
 	}
 
-	err = utils.GetDatabase(installation).Snapshot()
+	err = utils.GetDatabaseMigration(installation, clusterInstallation, logger).Snapshot()
 	if err != nil {
 		logger.Errorf("failed to create a snapshot of the database: %s", err.Error())
 		return model.ClusterInstallationMigrationStateCreationFailed
@@ -315,18 +312,29 @@ func (s *ClusterInstallationMigrationSupervisor) restoreDatabase(migration *mode
 		return model.ClusterInstallationMigrationStateCreationFailed
 	}
 
-	database := aws.NewRDSDatabaseClusterInstallation(migration.ClusterID, installation.ID)
-	err = database.Restore(s.installationSupervisor.store, logger)
+	snapshotStatus, err := utils.GetDatabaseMigration(installation, clusterInstallation, logger, s.aws).SnaphotStatus()
 	if err != nil {
-		switch err.Error() {
-		case aws.RDSErrorSnapshotCreating:
-			return migration.State
-		case aws.RDSErrorSnapshotModifying:
-			return migration.State
-		default:
+		logger.Errorf("failed to restore database: %s", err.Error())
+		return model.ClusterInstallationMigrationStateCreationFailed
+	}
+
+	switch snapshotStatus {
+	case model.DatabaseMigrationSnapshotStatusReady:
+		logger.Debug("snapshot is ready - restoring database")
+		err = utils.GetDatabaseMigration(installation, clusterInstallation, logger, s.aws).Restore()
+		if err != nil {
 			logger.Errorf("failed to restore database: %s", err.Error())
 			return model.ClusterInstallationMigrationStateCreationFailed
 		}
+
+	// TODO(gsagula): perhaps we should just return an error from SnapshotStatus.
+	case model.DatabaseMigrationSnapshotStatusFailing:
+		logger.Errorf("failed to restore database: snapshot is failing")
+		return model.ClusterInstallationMigrationStateCreationFailed
+
+	case model.DatabaseMigrationSnapshotStatusIP:
+		logger.Debug("snapshot is still not ready")
+		return migration.State
 	}
 
 	return model.ClusterInstallationMigrationStateRestoreDatabaseIP

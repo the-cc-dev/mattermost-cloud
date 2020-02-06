@@ -2,11 +2,9 @@ package aws
 
 import (
 	"fmt"
-	"sort"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/ec2"
-	"github.com/aws/aws-sdk-go/service/rds"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 
@@ -16,204 +14,16 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// RDSDatabaseMigration is a migrated database backed by AWS RDS.
-type RDSDatabaseMigration struct {
-	logger                       log.FieldLogger
-	store                        model.InstallationDatabaseStoreInterface
-	awsClient                    *Client
-	clusterInstallationMigration *model.ClusterInstallationMigration
-}
-
-// NewRDSDatabaseMigration returns a new RDSDatabase interface.
-func NewRDSDatabaseMigration(clusterInstallationMigration *model.ClusterInstallationMigration, store model.InstallationDatabaseStoreInterface, logger log.FieldLogger) *RDSDatabaseMigration {
-	database := RDSDatabaseMigration{
-		logger:                       logger,
-		store:                        store,
-		awsClient:                    New(),
-		clusterInstallationMigration: clusterInstallationMigration,
-	}
-	database.awsClient.AddSQLStore(store)
-
-	return &database
-}
-
-// Status returns the status of the database.
-func (d *RDSDatabaseMigration) Status() (string, error) {
-	clusterInstallations, err := d.store.GetClusterInstallations(&model.ClusterInstallationFilter{
-		ClusterID: d.clusterInstallationMigration.ClusterID,
-	})
-	if err != nil {
-		return "", err
-	}
-
-	if len(clusterInstallations) != 1 {
-		return "", errors.New("too many cluster installations")
-	}
-
-	if len(clusterInstallations) < 1 {
-		return "", errors.New("too little cluster installations")
-	}
-
-	input := rds.DescribeDBClusterEndpointsInput{
-		DBClusterIdentifier: aws.String(fmt.Sprintf("%s-migrated", CloudID(clusterInstallations[0].InstallationID))),
-	}
-
-	output, err := d.awsClient.describeDBClusterEndpoints(&input)
-	if err != nil {
-		return "", errors.Wrap(err, "unabled to check RDS database status")
-	}
-	if len(output.DBClusterEndpoints) < 1 {
-		return "", errors.Errorf("unabled to restore RDS database: %s has no endpoints", *input.DBClusterIdentifier)
-	}
-
-	for _, endpoint := range output.DBClusterEndpoints {
-		fmt.Println(endpoint)
-		switch *endpoint.Status {
-		case "deleting":
-			return model.DatabaseStatusFailing, nil
-		case "creating":
-			return model.DatabaseStatusNotReady, nil
-		case "modifying":
-			return model.DatabaseStatusNotReady, nil
-		}
-	}
-
-	return model.DatabaseStatusReady, nil
-}
-
-// Restore restores database from the most recent snapshot. Optianally, it takes a cluster ID if the
-// the intent is to restore the database in another cluster.
-func (d *RDSDatabaseMigration) Restore() error {
-	clusterInstallations, err := d.store.GetClusterInstallations(&model.ClusterInstallationFilter{
-		IDs: []string{d.clusterInstallationMigration.ClusterInstallationID},
-	})
-	if err != nil {
-		return err
-	}
-
-	if len(clusterInstallations) != 1 {
-		return errors.New("too many cluster installations")
-	}
-
-	if len(clusterInstallations) < 1 {
-		return errors.New("too little cluster installations")
-	}
-
-	dbClusterSnapshotsOut, err := d.awsClient.describeDBClusterSnapshots(&rds.DescribeDBClusterSnapshotsInput{
-		SnapshotType: aws.String(RDSDefaultSnapshotType),
-	})
-	if err != nil {
-		return errors.Wrap(err, "unabled to restore RDS database")
-	}
-
-	dbClusterID := CloudID(clusterInstallations[0].InstallationID)
-	expectedTagValue := fmt.Sprintf(DefaultClusterInstallationSnapshotTagValueTemplate, dbClusterID)
-
-	var snapshots []*rds.DBClusterSnapshot
-	for _, snapshot := range dbClusterSnapshotsOut.DBClusterSnapshots {
-		tags, err := d.awsClient.listTagsForResource(&rds.ListTagsForResourceInput{
-			ResourceName: snapshot.DBClusterSnapshotArn,
-		})
-		if err != nil {
-			return errors.Wrap(err, "unabled to restore RDS database")
-		}
-
-		for _, tag := range tags.TagList {
-			if tag.Key != nil && tag.Value != nil && *tag.Key == DefaultClusterInstallationSnapshotTagKey &&
-				*tag.Value == expectedTagValue {
-				snapshots = append(snapshots, snapshot)
-			}
-		}
-	}
-
-	if snapshots == nil {
-		return errors.Errorf("unabled to restore RDS database: DB cluster %s has no snapshots", dbClusterID)
-	}
-
-	sort.SliceStable(snapshots, func(i, j int) bool {
-		return snapshots[i].SnapshotCreateTime.After(*snapshots[j].SnapshotCreateTime)
-	})
-
-	vpcs, err := GetVpcsWithFilters([]*ec2.Filter{
-		{
-			Name:   aws.String(VpcClusterIDTagKey),
-			Values: []*string{aws.String(d.clusterInstallationMigration.ClusterID)},
-		},
-		{
-			Name:   aws.String(VpcAvailableTagKey),
-			Values: []*string{aws.String(VpcAvailableTagValueFalse)},
-		},
-	})
-	if err != nil {
-		return errors.Wrap(err, "unabled to restore RDS database")
-	}
-	if len(vpcs) != 1 {
-		return fmt.Errorf("unabled to restore RDS database: expected 1 VPC in cluster id %s, but got %d", d.clusterInstallationMigration.ClusterID, len(vpcs))
-	}
-
-	// Restore the database if the snapshot is available, otherwise return an error.
-	switch *snapshots[0].Status {
-	case RDSStatusAvailable:
-		err = d.awsClient.rdsEnsureRestoreDBClusterFromSnapshot(*vpcs[0].VpcId, fmt.Sprintf("%s-migrated", dbClusterID), *snapshots[0].DBClusterSnapshotIdentifier, d.logger)
-		if err != nil {
-			return errors.Wrap(err, "unabled to restore RDS database")
-		}
-		err = d.awsClient.rdsEnsureDBClusterInstanceCreated(dbClusterID, fmt.Sprintf("%s-master", dbClusterID), d.logger)
-		if err != nil {
-			return errors.Wrap(err, "unabled to restore RDS database")
-		}
-
-	case RDSStatusCreating:
-		return errors.New(RDSErrorSnapshotCreating)
-
-	case RDSStatusModifying:
-		return errors.New(RDSErrorSnapshotModifying)
-
-	case RDSStatusDeleting:
-		return errors.New(RDSErrorSnapshotDeleting)
-
-	default:
-		return errors.Errorf("unknown snapshot status %s", *snapshots[0].Status)
-	}
-
-	return nil
-}
-
 // RDSDatabase is a database backed by AWS RDS.
 type RDSDatabase struct {
 	installationID string
 }
-
-const (
-	// RDSErrorSnapshotCreating ...
-	RDSErrorSnapshotCreating = "unabled to restore RDS database: rds database snapshot is being created"
-	// RDSErrorSnapshotDeleting ...
-	RDSErrorSnapshotDeleting = "unabled to restore RDS database: rds database snapshot is being deleted"
-	// RDSErrorSnapshotModifying ...
-	RDSErrorSnapshotModifying = "unabled to restore RDS database: rds database snapshot is being modified"
-)
 
 // NewRDSDatabase returns a new RDSDatabase interface.
 func NewRDSDatabase(installationID string) *RDSDatabase {
 	return &RDSDatabase{
 		installationID: installationID,
 	}
-}
-
-// Snapshot takes a snapshot of the RDS database.
-func (d *RDSDatabase) Snapshot() error {
-	awsClient := New()
-	awsID := CloudID(d.installationID)
-
-	err := awsClient.rdsEnsureDBClusterSnapshotCreated(awsID, []*rds.Tag{&rds.Tag{
-		Key:   aws.String(DefaultClusterInstallationSnapshotTagKey),
-		Value: aws.String(fmt.Sprintf(DefaultClusterInstallationSnapshotTagValueTemplate, awsID)),
-	}})
-	if err != nil {
-		return err
-	}
-
-	return nil
 }
 
 // Provision completes all the steps necessary to provision a RDS database.

@@ -144,10 +144,14 @@ var serverCmd = &cobra.Command{
 		)
 
 		var multiDoer supervisor.MultiDoer
+
 		clusterSupervisorInstance := supervisor.NewClusterSupervisor(sqlStore, kopsProvisioner, aws.New(), instanceID, logger)
 		installationSupervisorInstance := supervisor.NewInstallationSupervisor(sqlStore, kopsProvisioner, aws.New(), instanceID, clusterResourceThreshold, keepDatabaseData, keepFilestoreData, logger)
 		clusterInstallationSupervisorInstance := supervisor.NewClusterInstallationSupervisor(sqlStore, kopsProvisioner, aws.New(), instanceID, logger)
-		clusterInstallationMigrationSupervisorInstance := supervisor.NewClusterInstallationMigrationSupervisor(sqlStore, clusterSupervisorInstance, installationSupervisorInstance, clusterInstallationSupervisorInstance, aws.New(), instanceID, logger)
+		clusterInstallationMigrationSupervisorInstance := supervisor.NewClusterInstallationMigrationSupervisor(
+			sqlStore, clusterSupervisorInstance, installationSupervisorInstance,
+			clusterInstallationSupervisorInstance, aws.New(), instanceID, logger)
+
 		if clusterSupervisor {
 			multiDoer = append(multiDoer, clusterSupervisorInstance)
 		}
