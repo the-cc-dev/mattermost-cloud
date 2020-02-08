@@ -3,65 +3,65 @@ package model
 // CMI = Cluster Installation Migration
 
 const (
-	// CMIStateStable is an InstallationMigration in a stable state and undergoing no changes.
-	CMIStateStable = "stable"
-	// CMIStateCreationRequested ...
-	CMIStateCreationRequested = "creation-requested"
-	// CMIStateCreationComplete ...
-	CMIStateCreationComplete = "creation-complete"
-	// CMIStateCreationFailed ...
-	CMIStateCreationFailed = "creation-failed"
+	// CIMigrationStable is an InstallationMigration in a stable state and undergoing no changes.
+	CIMigrationStable = "stable"
+	// CIMigrationCreationRequested ...
+	CIMigrationCreationRequested = "creation-requested"
+	// CIMigrationCreationComplete ...
+	CIMigrationCreationComplete = "creation-complete"
+	// CIMigrationCreationFailed ...
+	CIMigrationCreationFailed = "creation-failed"
 
-	// CMIStateSnapshotCreationIP indicates that the snapshot is being created.
-	CMIStateSnapshotCreationIP = "snapshot-creation-in-progress"
-	// CMIStateSnapshotCreationComplete waits while the snapshot is being created.
-	CMIStateSnapshotCreationComplete = "snapshot-creation-complete"
+	// CIMigrationSnapshotCreationIP indicates that the snapshot is being created.
+	CIMigrationSnapshotCreationIP = "snapshot-creation-in-progress"
+	// CIMigrationSnapshotCreationComplete waits while the snapshot is being created.
+	CIMigrationSnapshotCreationComplete = "snapshot-creation-complete"
 
-	// CMIStateRestoreDatabaseIP indicates that a database is being restored.
-	CMIStateRestoreDatabaseIP = "restore-database-in-progress"
-	// CMIStateRestoreDatabaseComplete indicates that a database is being restored.
-	CMIStateRestoreDatabaseComplete = "restore-database-complete"
+	// CIMigrationRestoreDatabaseIP indicates that a database is being restored.
+	CIMigrationRestoreDatabaseIP = "restore-database-in-progress"
+	// CIMigrationRestoreDatabaseComplete indicates that a database is being restored.
+	CIMigrationRestoreDatabaseComplete = "restore-database-complete"
 
-	// CMIStateClusterInstallationCreationIP indicates that a new cluster installation is being created.
-	CMIStateClusterInstallationCreationIP = "cluster-installation-in-progress"
+	// CIMigrationClusterInstallationCreationIP indicates that a new cluster installation is being created.
+	CIMigrationClusterInstallationCreationIP = "cluster-installation-in-progress"
 
-	// CMIStateClusterInstallationCreationComplete requests a new cluster installation.
-	CMIStateClusterInstallationCreationComplete = "cluster-installation-creation-complete"
+	// CIMigrationClusterInstallationCreationComplete requests a new cluster installation.
+	CIMigrationClusterInstallationCreationComplete = "cluster-installation-creation-complete"
 
-	// CMIStateCreationInProgress is an InstallationMigration in the process of being created.
-	// CMIStateCreationInProgress = "creation-in-progress"
-	// CMIStateClusterInstallationCreated indicates that a new cluster installation was created.
-	// CMIStateClusterInstallationCreated = "cluster-installation-created"
+	// CIMigrationCreationInProgress is an InstallationMigration in the process of being created.
+	// CIMigrationCreationInProgress = "creation-in-progress"
+	// CIMigrationClusterInstallationCreated indicates that a new cluster installation was created.
+	// CIMigrationClusterInstallationCreated = "cluster-installation-created"
 )
 
-// AllCMIStates is a list of all states an InstallationMigration can be in.
+// AllCIMigrations is a list of all states an InstallationMigration can be in.
 // Warning:
 // When creating a new InstallationMigration state, it must be added to this list.
-var AllCMIStates = []string{
-	CMIStateStable,
-	CMIStateCreationRequested,
-	CMIStateCreationComplete,
-	CMIStateCreationFailed,
-	CMIStateSnapshotCreationIP,
-	CMIStateSnapshotCreationComplete,
-	CMIStateRestoreDatabaseIP,
-	CMIStateRestoreDatabaseComplete,
+var AllCIMigrations = []string{
+	CIMigrationStable,
+	CIMigrationCreationRequested,
+	CIMigrationCreationComplete,
+	CIMigrationCreationFailed,
+	CIMigrationSnapshotCreationIP,
+	CIMigrationSnapshotCreationComplete,
+	CIMigrationRestoreDatabaseIP,
+	CIMigrationRestoreDatabaseComplete,
 }
 
-// AllCMIStatesPendingWork is a list of all InstallationMigration states that
+// AllCIMigrationsPendingWork is a list of all InstallationMigration states that
 // the supervisor will attempt to transition towards stable on the next "tick".
 // Warning:
 // When creating a new InstallationMigration state, it must be added to this list if the
 // cloud InstallationMigration supervisor should perform some action on its next work cycle.
-var AllCMIStatesPendingWork = []string{
-	CMIStateCreationRequested,
-	CMIStateSnapshotCreationIP,
-	CMIStateCreationRequested,
-	CMIStateCreationComplete,
-	CMIStateSnapshotCreationIP,
-	CMIStateSnapshotCreationComplete,
-	CMIStateRestoreDatabaseIP,
-	CMIStateRestoreDatabaseComplete,
+var AllCIMigrationsPendingWork = []string{
+	CIMigrationCreationRequested,
+	CIMigrationSnapshotCreationIP,
+	CIMigrationCreationRequested,
+	CIMigrationCreationComplete,
+	CIMigrationSnapshotCreationIP,
+	CIMigrationSnapshotCreationComplete,
+	CIMigrationRestoreDatabaseIP,
+	CIMigrationRestoreDatabaseComplete,
 }
 
 // AllCMIRequestStates is a list of all states that an InstallationMigration can
@@ -70,5 +70,5 @@ var AllCMIStatesPendingWork = []string{
 // When creating a new InstallationMigration state, it must be added to this list if an
 // API endpoint should put the InstallationMigration in this state.
 var AllCMIRequestStates = []string{
-	CMIStateCreationRequested,
+	CIMigrationCreationRequested,
 }

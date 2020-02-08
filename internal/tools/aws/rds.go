@@ -357,7 +357,7 @@ func (a *Client) describeDBClusterEndpoints(input *rds.DescribeDBClusterEndpoint
 	return dbClusterEndpointsOutput, nil
 }
 
-func (a *Client) describeDBInstancesEndpoints(input *rds.DescribeDBInstancesInput) (*rds.DescribeDBInstancesOutput, error) {
+func (a *Client) describeDBInstances(input *rds.DescribeDBInstancesInput) (*rds.DescribeDBInstancesOutput, error) {
 	svc := rds.New(session.New(), &aws.Config{
 		Region: aws.String(DefaultAWSRegion),
 	})

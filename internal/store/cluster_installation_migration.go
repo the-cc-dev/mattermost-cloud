@@ -40,7 +40,7 @@ func (sqlStore *SQLStore) GetClusterInstallationMigration(id string) (*model.Clu
 func (sqlStore *SQLStore) GetUnlockedClusterInstallationMigrationsPendingWork() ([]*model.ClusterInstallationMigration, error) {
 	builder := clusterInstallationMigrationSelect.
 		Where(sq.Eq{
-			"State": model.AllCMIStatesPendingWork,
+			"State": model.AllCIMigrationsPendingWork,
 		}).
 		Where("LockAcquiredAt = 0").
 		OrderBy("CreateAt ASC")

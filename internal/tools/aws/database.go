@@ -5,6 +5,7 @@ import (
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/ec2"
+	"github.com/aws/aws-sdk-go/service/rds"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 
@@ -51,6 +52,22 @@ func (d *RDSDatabase) Provision(store model.InstallationDatabaseStoreInterface, 
 	if err != nil {
 		return err
 	}
+
+	return nil
+}
+
+// Snapshot takes a snapshot of the RDS database.
+func (d *RDSDatabase) Snapshot(logger log.FieldLogger) error {
+	awsClient := New()
+	err := awsClient.rdsEnsureDBClusterSnapshotCreated(CloudID(d.installationID), []*rds.Tag{&rds.Tag{
+		Key:   aws.String(DefaultClusterInstallationSnapshotTagKey),
+		Value: aws.String(fmt.Sprintf(DefaultClusterInstallationSnapshotTagValueTemplate, CloudID(d.installationID))),
+	}})
+	if err != nil {
+		return errors.Wrapf(err, "unabled to snapshot RDS database: %s", CloudID(d.installationID))
+	}
+
+	logger.WithField("db-cluster-name", CloudID(d.installationID)).Info("RDS database snapshot in progress")
 
 	return nil
 }

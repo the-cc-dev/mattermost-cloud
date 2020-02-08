@@ -6,31 +6,22 @@ import (
 )
 
 const (
-	// DatabaseMigrationSnapshotCreationComplete ...
-	DatabaseMigrationSnapshotCreationComplete = "snapshot-creation-complete"
-	// DatabaseMigrationSnapshotCreationIP ...
-	DatabaseMigrationSnapshotCreationIP = "snapshot-creation-in-progress"
-	// DatabaseMigrationSnapshotModifying ...
-	DatabaseMigrationSnapshotModifying = "snapshot-modifying"
+	// DatabaseMigrationReplicaCreationIP ...
+	DatabaseMigrationReplicaCreationIP = "replica-creation-in-progress"
+	// DatabaseMigrationReplicaCreationComplete ..
+	DatabaseMigrationReplicaCreationComplete = "replica-creation-complete"
 
-	// DatabaseMigrationDatabaseCreationComplete ..
-	DatabaseMigrationDatabaseCreationComplete = "-databasecreation-complete"
-	// DatabaseMigrationDatabaseCreationIP ...
-	DatabaseMigrationDatabaseCreationIP = "database-creation-in-progress"
-	// DatabaseMigrationDatabaseDeletionIP ...
-	DatabaseMigrationDatabaseDeletionIP = "database-deletion-in-progress"
-
-	// NotSupportedDatabaseErrorMessage is use to report that database type does not
-	// support migration.
-	NotSupportedDatabaseErrorMessage = "attempted to migrate an unsupported database type"
+	// DatabaseMigrationReplicaProvisionIP ..
+	DatabaseMigrationReplicaProvisionIP = "replica-provision-in-progress"
+	// DatabaseMigrationReplicaProvisionComplete ...
+	DatabaseMigrationReplicaProvisionComplete = "replica-provision-complete"
 )
 
 // DatabaseMigration is the interface for managing Mattermost database migrations.
 type DatabaseMigration interface {
-	Restore(logger log.FieldLogger) error
-	Snapshot(logger log.FieldLogger) error
-	SnapshotStatus(logger log.FieldLogger) (string, error)
-	DatabaseStatus(logger log.FieldLogger) (string, error)
+	Restore(logger log.FieldLogger) (string, error)
+	Status(logger log.FieldLogger) (string, error)
+	Teardown(logger log.FieldLogger) error
 }
 
 // NotSupportedDatabaseMigration is supplied when systems required a database type that does not
@@ -38,21 +29,16 @@ type DatabaseMigration interface {
 type NotSupportedDatabaseMigration struct{}
 
 // Restore returns not supported database error.
-func (n *NotSupportedDatabaseMigration) Restore(logger log.FieldLogger) error {
-	return errors.New(NotSupportedDatabaseErrorMessage)
+func (n *NotSupportedDatabaseMigration) Restore(logger log.FieldLogger) (string, error) {
+	return "", errors.New("attempted to migrate an unsupported database type")
 }
 
-// Snapshot returns not supported database error.
-func (n *NotSupportedDatabaseMigration) Snapshot(logger log.FieldLogger) error {
-	return errors.New(NotSupportedDatabaseErrorMessage)
+// Status returns not supported database error.
+func (n *NotSupportedDatabaseMigration) Status(logger log.FieldLogger) (string, error) {
+	return "", errors.New("attempted to migrate an unsupported database type")
 }
 
-// SnapshotStatus returns not supported database error.
-func (n *NotSupportedDatabaseMigration) SnapshotStatus(logger log.FieldLogger) (string, error) {
-	return "", errors.New(NotSupportedDatabaseErrorMessage)
-}
-
-// DatabaseStatus returns not supported database error.
-func (n *NotSupportedDatabaseMigration) DatabaseStatus(logger log.FieldLogger) (string, error) {
-	return "", errors.New(NotSupportedDatabaseErrorMessage)
+// Teardown returns not supported database error.
+func (n *NotSupportedDatabaseMigration) Teardown(logger log.FieldLogger) error {
+	return errors.New("attempted to migrate an unsupported database type")
 }

@@ -103,24 +103,21 @@ func (s *ClusterInstallationMigrationSupervisor) transitionClusterInstallationMi
 	case model.InstallationStateCreationRequested:
 		return s.createClusterInstallationMigration(migration, logger)
 
-	case model.CMIStateCreationComplete:
+	case model.CIMigrationCreationComplete:
 		return s.createClusterInstallationSnapshot(migration, logger)
 
-	case model.CMIStateSnapshotCreationIP:
-		return s.waitForSnapshot(migration, logger)
-
-	case model.CMIStateSnapshotCreationComplete:
+	case model.CIMigrationSnapshotCreationIP:
 		return s.restoreDatabase(migration, logger)
 
-	case model.CMIStateRestoreDatabaseIP:
+	case model.CIMigrationRestoreDatabaseIP:
 		return s.waitForDatabase(migration, logger)
 
-	case model.CMIStateRestoreDatabaseComplete:
-		return model.CMIStateStable
+	case model.CIMigrationRestoreDatabaseComplete:
+		return model.CIMigrationStable
 
-	// case model.CMIStateSnapshotCreationIP:
+	// case model.CIMigrationSnapshotCreationIP:
 	// 	return s.createClusterInstallation(migration, logger)
-	// case model.CMIStateClusterInstallationCreationIP:
+	// case model.CIMigrationClusterInstallationCreationIP:
 	// 	return s.waitForClusterInstallation(migration, logger)
 
 	default:
@@ -133,31 +130,31 @@ func (s *ClusterInstallationMigrationSupervisor) createClusterInstallationMigrat
 	clusterInstallationMigration, err := s.store.GetClusterInstallationMigration(migration.ID)
 	if err != nil {
 		logger.Errorf("failed to get cluster installation migration: %s", err.Error())
-		return model.CMIStateCreationFailed
+		return model.CIMigrationCreationFailed
 	}
 
 	clusterInstallation, err := s.clusterInstallationSupervisor.store.GetClusterInstallation(migration.ClusterInstallationID)
 	if err != nil {
 		logger.Errorf("failed to get cluster installation: %s", err.Error())
-		return model.CMIStateCreationFailed
+		return model.CIMigrationCreationFailed
 	}
 
 	if clusterInstallation.LockAcquiredBy == nil {
 		clusterInstallationLocked, err := s.clusterInstallationSupervisor.store.LockClusterInstallations([]string{clusterInstallation.ID}, clusterInstallationMigration.ID)
 		if err != nil {
 			logger.Errorf("unable to lock cluster installation: %s", clusterInstallation.ID)
-			return model.CMIStateCreationFailed
+			return model.CIMigrationCreationFailed
 		}
 		if !clusterInstallationLocked {
 			logger.Debugf("still locking cluster installation id: %s", clusterInstallation.ID)
-			return model.CMIStateCreationRequested
+			return model.CIMigrationCreationRequested
 		}
 	}
 
 	installation, err := s.installationSupervisor.store.GetInstallation(clusterInstallation.InstallationID)
 	if err != nil {
 		logger.Errorf("failed to get installation: %s", err.Error())
-		return model.CMIStateCreationFailed
+		return model.CIMigrationCreationFailed
 	}
 
 	if installation.Database != model.InstallationDatabaseAwsRDS {
@@ -169,7 +166,7 @@ func (s *ClusterInstallationMigrationSupervisor) createClusterInstallationMigrat
 		installationLocked, err := s.installationSupervisor.store.LockInstallation(installation.ID, clusterInstallationMigration.ID)
 		if err != nil {
 			logger.Errorf("unable to lock installation: %s", err.Error())
-			return model.CMIStateCreationFailed
+			return model.CIMigrationCreationFailed
 		}
 		if !installationLocked {
 			logger.Debugf("still locking installation id: %s", installation.ID)
@@ -177,30 +174,29 @@ func (s *ClusterInstallationMigrationSupervisor) createClusterInstallationMigrat
 		}
 	}
 
-	return model.CMIStateCreationComplete
+	return model.CIMigrationCreationComplete
 }
 
 func (s *ClusterInstallationMigrationSupervisor) createClusterInstallationSnapshot(migration *model.ClusterInstallationMigration, logger log.FieldLogger) string {
-
 	clusterInstallation, err := s.clusterInstallationSupervisor.store.GetClusterInstallation(migration.ClusterInstallationID)
 	if err != nil {
 		logger.Errorf("failed to retrieve cluster installation: %s", err.Error())
-		return model.CMIStateCreationFailed
+		return model.CIMigrationCreationFailed
 	}
 
 	installation, err := s.installationSupervisor.store.GetInstallation(clusterInstallation.InstallationID)
 	if err != nil {
 		logger.Errorf("failed to retrieve installation: %s", err.Error())
-		return model.CMIStateCreationFailed
+		return model.CIMigrationCreationFailed
 	}
 
-	err = utils.GetDatabaseMigration(installation, clusterInstallation).Snapshot(logger)
+	err = utils.GetDatabase(installation).Snapshot(logger)
 	if err != nil {
 		logger.Errorf("failed to create a snapshot of the database: %s", err.Error())
-		return model.CMIStateCreationFailed
+		return model.CIMigrationCreationFailed
 	}
 
-	return model.CMIStateSnapshotCreationIP
+	return model.CIMigrationSnapshotCreationIP
 }
 
 // func (s *ClusterInstallationMigrationSupervisor) createClusterInstallation(migration *model.ClusterInstallationMigration, logger log.FieldLogger) string {
@@ -208,44 +204,44 @@ func (s *ClusterInstallationMigrationSupervisor) createClusterInstallationSnapsh
 // 	clusterInstallationMigration, err := s.store.GetClusterInstallationMigration(migration.ID)
 // 	if err != nil {
 // 		logger.Errorf("failed to retrieve cluster installation migration: %s", err.Error())
-// 		return model.CMIStateCreationFailed
+// 		return model.CIMigrationCreationFailed
 // 	}
-// 	if clusterInstallationMigration.State != model.CMIStateSnapshotCreationIP {
-// 		return model.CMIStateCreationFailed
+// 	if clusterInstallationMigration.State != model.CIMigrationSnapshotCreationIP {
+// 		return model.CIMigrationCreationFailed
 // 	}
 
 // 	cluster, err := s.clusterSupervisor.store.GetCluster(clusterInstallationMigration.ClusterID)
 // 	if err != nil {
 // 		logger.Errorf("failed to retrieve cluster: %s", err.Error())
-// 		return model.CMIStateCreationFailed
+// 		return model.CIMigrationCreationFailed
 // 	}
 
 // 	clusterInstallation, err := s.clusterInstallationSupervisor.store.GetClusterInstallation(migration.ClusterInstallationID)
 // 	if err != nil {
 // 		logger.Errorf("failed to retrieve cluster installation migration: %s", err.Error())
-// 		return model.CMIStateCreationFailed
+// 		return model.CIMigrationCreationFailed
 // 	}
 
 // 	installation, err := s.installationSupervisor.store.GetInstallation(clusterInstallation.InstallationID)
 // 	if err != nil {
 // 		logger.Errorf("failed to retrieve installation: %s", err.Error())
-// 		return model.CMIStateCreationFailed
+// 		return model.CIMigrationCreationFailed
 // 	}
 
 // 	clusterInstallationRequest := s.installationSupervisor.createClusterInstallation(cluster, installation, s.instanceID, logger)
 // 	if clusterInstallationRequest != nil && clusterInstallationRequest.State != model.ClusterStateCreationRequested {
 // 		logger.Errorf("unexpected cluster installation state: %s", clusterInstallationRequest.State)
-// 		return model.CMIStateCreationFailed
+// 		return model.CIMigrationCreationFailed
 // 	}
 
 // 	err = s.installationSupervisor.Do()
 // 	if err != nil {
 // 		logger.Errorf("failed when running the scheduler: %s", err.Error())
-// 		return model.CMIStateCreationFailed
+// 		return model.CIMigrationCreationFailed
 // 	}
 // 	s.installationSupervisor.Supervise(installation)
 
-// 	return model.CMIStateClusterInstallationCreationIP
+// 	return model.CIMigrationClusterInstallationCreationIP
 // }
 
 // func (s *ClusterInstallationMigrationSupervisor) waitForClusterInstallation(migration *model.ClusterInstallationMigration, logger log.FieldLogger) string {
@@ -253,22 +249,22 @@ func (s *ClusterInstallationMigrationSupervisor) createClusterInstallationSnapsh
 // 	clusterInstallationMigration, err := s.store.GetClusterInstallationMigration(migration.ID)
 // 	if err != nil {
 // 		logger.Errorf("failed to retrieve cluster installation migration: %s", err.Error())
-// 		return model.CMIStateCreationFailed
+// 		return model.CIMigrationCreationFailed
 // 	}
-// 	if clusterInstallationMigration.State != model.CMIStateSnapshotCreationIP {
-// 		return model.CMIStateCreationFailed
+// 	if clusterInstallationMigration.State != model.CIMigrationSnapshotCreationIP {
+// 		return model.CIMigrationCreationFailed
 // 	}
 
 // 	clusterInstallation, err := s.clusterInstallationSupervisor.store.GetClusterInstallation(migration.ClusterInstallationID)
 // 	if err != nil {
 // 		logger.Errorf("failed to retrieve cluster installation migration: %s", err.Error())
-// 		return model.CMIStateCreationFailed
+// 		return model.CIMigrationCreationFailed
 // 	}
 
 // 	installation, err := s.installationSupervisor.store.GetInstallation(clusterInstallation.InstallationID)
 // 	if err != nil {
 // 		logger.Errorf("failed to retrieve installation: %s", err.Error())
-// 		return model.CMIStateCreationFailed
+// 		return model.CIMigrationCreationFailed
 // 	}
 
 // 	clusterInstallations, err := s.installationSupervisor.store.GetClusterInstallations(&model.ClusterInstallationFilter{
@@ -277,7 +273,7 @@ func (s *ClusterInstallationMigrationSupervisor) createClusterInstallationSnapsh
 // 		IncludeDeleted: false,
 // 	})
 // 	if err != nil || len(clusterInstallations) != 1 {
-// 		return model.CMIStateCreationFailed
+// 		return model.CIMigrationCreationFailed
 // 	}
 
 // 	if clusterInstallations[0].State != model.ClusterInstallationStateStable {
@@ -285,104 +281,92 @@ func (s *ClusterInstallationMigrationSupervisor) createClusterInstallationSnapsh
 // 		return migration.State
 // 	}
 
-// 	return model.CMIStateClusterInstallationCreationComplete
+// 	return model.CIMigrationClusterInstallationCreationComplete
 // }
 
-func (s *ClusterInstallationMigrationSupervisor) waitForSnapshot(migration *model.ClusterInstallationMigration, logger log.FieldLogger) string {
-	clusterInstallation, err := s.clusterInstallationSupervisor.store.GetClusterInstallation(migration.ClusterInstallationID)
-	if err != nil {
-		return model.CMIStateCreationFailed
-	}
+// func (s *ClusterInstallationMigrationSupervisor) waitForSnapshot(migration *model.ClusterInstallationMigration, logger log.FieldLogger) string {
+// 	clusterInstallation, err := s.clusterInstallationSupervisor.store.GetClusterInstallation(migration.ClusterInstallationID)
+// 	if err != nil {
+// 		return model.CIMigrationCreationFailed
+// 	}
 
-	installation, err := s.installationSupervisor.store.GetInstallation(clusterInstallation.InstallationID)
-	if err != nil {
-		return model.CMIStateCreationFailed
-	}
+// 	installation, err := s.installationSupervisor.store.GetInstallation(clusterInstallation.InstallationID)
+// 	if err != nil {
+// 		return model.CIMigrationCreationFailed
+// 	}
 
-	snapshotStatus, err := utils.GetDatabaseMigration(installation, clusterInstallation).SnapshotStatus(logger)
-	if err != nil {
-		logger.Errorf("failed to restore database: %s", err.Error())
-		return model.CMIStateCreationFailed
-	}
+// 	snapshotStatus, err := utils.GetDatabaseMigration(installation, clusterInstallation).SnapshotStatus(logger)
+// 	if err != nil {
+// 		logger.Errorf("failed to restore database: %s", err.Error())
+// 		return model.CIMigrationCreationFailed
+// 	}
 
-	switch snapshotStatus {
-	case model.DatabaseMigrationSnapshotCreationComplete:
-		logger.Debug("snapshot creation is completed")
-		return model.CMIStateSnapshotCreationComplete
-	case model.DatabaseMigrationSnapshotModifying:
-		logger.Errorf("snapshot is being modified")
-		return model.CMIStateCreationFailed
-	case model.DatabaseMigrationSnapshotCreationIP:
-		logger.Debug("snapshot creation is still in progress")
-	}
+// 	switch snapshotStatus {
+// 	case model.DatabaseMigrationSnapshotCreationComplete:
+// 		logger.Debug("snapshot creation is completed")
+// 		return model.CIMigrationSnapshotCreationComplete
+// 	case model.DatabaseMigrationSnapshotModifying:
+// 		logger.Errorf("snapshot is being modified")
+// 		return model.CIMigrationCreationFailed
+// 	case model.DatabaseMigrationSnapshotCreationIP:
+// 		logger.Debug("snapshot creation is still in progress")
+// 	}
 
-	return migration.State
-}
+// 	return migration.State
+// }
 
 func (s *ClusterInstallationMigrationSupervisor) restoreDatabase(migration *model.ClusterInstallationMigration, logger log.FieldLogger) string {
 	clusterInstallation, err := s.clusterInstallationSupervisor.store.GetClusterInstallation(migration.ClusterInstallationID)
 	if err != nil {
-		return model.CMIStateCreationFailed
+		return model.CIMigrationCreationFailed
 	}
 
 	installation, err := s.installationSupervisor.store.GetInstallation(clusterInstallation.InstallationID)
 	if err != nil {
-		return model.CMIStateCreationFailed
+		return model.CIMigrationCreationFailed
 	}
 
-	snapshotStatus, err := utils.GetDatabaseMigration(installation, clusterInstallation).SnapshotStatus(logger)
+	status, err := utils.GetDatabaseMigration(installation, clusterInstallation).Restore(logger)
 	if err != nil {
 		logger.Errorf("failed to restore database: %s", err.Error())
-		return model.CMIStateCreationFailed
+		return model.CIMigrationCreationFailed
 	}
 
-	switch snapshotStatus {
-	case model.DatabaseMigrationSnapshotCreationComplete:
-		logger.Debug("snapshot is ready - restoring database")
-		err = utils.GetDatabaseMigration(installation, clusterInstallation).Restore(logger)
-		if err != nil {
-			logger.Errorf("failed to restore database: %s", err.Error())
-			return model.CMIStateCreationFailed
-		}
-	case model.DatabaseMigrationSnapshotModifying:
-		logger.Errorf("failed to restore database: snapshot is being modified")
-		return model.CMIStateCreationFailed
-	case model.DatabaseMigrationSnapshotCreationIP:
-		logger.Debug("snapshot creation is still in progress")
+	switch status {
+	case model.DatabaseMigrationReplicaCreationIP:
 		return migration.State
+	case model.DatabaseMigrationReplicaCreationComplete:
+		return model.CIMigrationRestoreDatabaseIP
 	}
 
-	return model.CMIStateRestoreDatabaseIP
+	return model.CIMigrationCreationFailed
 }
 
 func (s *ClusterInstallationMigrationSupervisor) waitForDatabase(migration *model.ClusterInstallationMigration, logger log.FieldLogger) string {
-
 	clusterInstallation, err := s.clusterInstallationSupervisor.store.GetClusterInstallation(migration.ClusterInstallationID)
 	if err != nil {
-		return model.CMIStateCreationFailed
+		return model.CIMigrationCreationFailed
 	}
 
 	installation, err := s.installationSupervisor.store.GetInstallation(clusterInstallation.InstallationID)
 	if err != nil {
-		return model.CMIStateCreationFailed
+		return model.CIMigrationCreationFailed
 	}
 
-	databaseStatus, err := utils.GetDatabaseMigration(installation, clusterInstallation).DatabaseStatus(logger)
+	databaseStatus, err := utils.GetDatabaseMigration(installation, clusterInstallation).Status(logger)
 	if err != nil {
 		logger.Errorf("failed to restore database: %s", err.Error())
-		return model.CMIStateCreationFailed
+		return model.CIMigrationCreationFailed
 	}
 
 	switch databaseStatus {
-	case model.DatabaseMigrationDatabaseCreationComplete:
+	case model.DatabaseMigrationReplicaProvisionComplete:
 		logger.Debug("database creation complete")
-		return model.CMIStateRestoreDatabaseComplete
-	case model.DatabaseMigrationDatabaseDeletionIP:
-		logger.Errorf("failed to restore database: database is being deleted")
-		return model.CMIStateCreationFailed
-	case model.DatabaseMigrationDatabaseCreationIP:
+	case model.DatabaseMigrationReplicaProvisionIP:
 		logger.Debug("database creation is still in progress")
+		return migration.State
 	}
 
-	return migration.State
+	return model.CIMigrationRestoreDatabaseComplete
+
 }
