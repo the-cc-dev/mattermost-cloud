@@ -349,9 +349,24 @@ func (a *Client) describeDBClusterEndpoints(input *rds.DescribeDBClusterEndpoint
 	})
 
 	dbClusterEndpointsOutput, err := svc.DescribeDBClusterEndpoints(input)
+
 	if err != nil {
 		return nil, err
 	}
 
 	return dbClusterEndpointsOutput, nil
+}
+
+func (a *Client) describeDBInstancesEndpoints(input *rds.DescribeDBInstancesInput) (*rds.DescribeDBInstancesOutput, error) {
+	svc := rds.New(session.New(), &aws.Config{
+		Region: aws.String(DefaultAWSRegion),
+	})
+
+	dbInstancesOutput, err := svc.DescribeDBInstances(input)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return dbInstancesOutput, nil
 }

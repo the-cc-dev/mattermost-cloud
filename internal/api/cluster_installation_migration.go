@@ -30,7 +30,7 @@ func handleCreateClusterInstallationMigration(c *Context, w http.ResponseWriter,
 	migration := model.ClusterInstallationMigration{
 		ClusterID:             createMigrationRequest.ClusterID,
 		ClusterInstallationID: createMigrationRequest.ClusterInstallationID,
-		State:                 model.ClusterInstallationMigrationStateCreationRequested,
+		State:                 model.CMIStateCreationRequested,
 	}
 
 	err = c.Store.CreateClusterInstallationMigration(&migration)

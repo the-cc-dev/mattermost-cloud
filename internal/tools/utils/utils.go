@@ -7,7 +7,6 @@ import (
 
 	"github.com/mattermost/mattermost-cloud/internal/tools/aws"
 	"github.com/mattermost/mattermost-cloud/model"
-	log "github.com/sirupsen/logrus"
 )
 
 // CopyDirectory copy the entire directory to another destination
@@ -104,11 +103,10 @@ func GetDatabase(i *model.Installation) model.Database {
 }
 
 // GetDatabaseMigration returns the Database interface that matches the cluster installation migration.
-func GetDatabaseMigration(installation *model.Installation, clusterInstallation *model.ClusterInstallation, logger log.FieldLogger, awsClient aws.AWS) model.DatabaseMigration {
+func GetDatabaseMigration(installation *model.Installation, clusterInstallation *model.ClusterInstallation) model.DatabaseMigration {
 	switch installation.Database {
 	case model.InstallationDatabaseAwsRDS:
-		return aws.NewRDSDatabaseMigration(installation.ID, clusterInstallation.ClusterID, logger, awsClient)
+		return aws.NewRDSDatabaseMigration(installation.ID, clusterInstallation.ClusterID)
 	}
-
-	return aws.NewRDSDatabaseMigration(installation.ID, clusterInstallation.ClusterID, logger, awsClient)
+	return &model.NotSupportedDatabaseMigration{}
 }
