@@ -14,19 +14,11 @@ const (
 
 	// CIMigrationSnapshotCreationIP indicates that the snapshot is being created.
 	CIMigrationSnapshotCreationIP = "snapshot-creation-in-progress"
-	// CIMigrationSnapshotCreationComplete waits while the snapshot is being created.
-	CIMigrationSnapshotCreationComplete = "snapshot-creation-complete"
 
 	// CIMigrationRestoreDatabaseIP indicates that a database is being restored.
 	CIMigrationRestoreDatabaseIP = "restore-database-in-progress"
 	// CIMigrationRestoreDatabaseComplete indicates that a database is being restored.
 	CIMigrationRestoreDatabaseComplete = "restore-database-complete"
-
-	// CIMigrationClusterInstallationCreationIP indicates that a new cluster installation is being created.
-	CIMigrationClusterInstallationCreationIP = "cluster-installation-in-progress"
-
-	// CIMigrationClusterInstallationCreationComplete requests a new cluster installation.
-	CIMigrationClusterInstallationCreationComplete = "cluster-installation-creation-complete"
 
 	// CIMigrationCreationInProgress is an InstallationMigration in the process of being created.
 	// CIMigrationCreationInProgress = "creation-in-progress"
@@ -43,7 +35,6 @@ var AllCIMigrations = []string{
 	CIMigrationCreationComplete,
 	CIMigrationCreationFailed,
 	CIMigrationSnapshotCreationIP,
-	CIMigrationSnapshotCreationComplete,
 	CIMigrationRestoreDatabaseIP,
 	CIMigrationRestoreDatabaseComplete,
 }
@@ -55,11 +46,9 @@ var AllCIMigrations = []string{
 // cloud InstallationMigration supervisor should perform some action on its next work cycle.
 var AllCIMigrationsPendingWork = []string{
 	CIMigrationCreationRequested,
-	CIMigrationSnapshotCreationIP,
 	CIMigrationCreationRequested,
 	CIMigrationCreationComplete,
 	CIMigrationSnapshotCreationIP,
-	CIMigrationSnapshotCreationComplete,
 	CIMigrationRestoreDatabaseIP,
 	CIMigrationRestoreDatabaseComplete,
 }

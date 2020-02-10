@@ -91,6 +91,45 @@ const (
 	// Cluster installation id should be passed to this template when tagging the resource.
 	DefaultClusterInstallationSnapshotTagValueTemplate = "rds-snapshot-%s"
 
+	// RDSAuroraMySQLEngineName ..
+	RDSAuroraMySQLEngineName = "aurora-mysql"
+
+	// RDSAuroraDefaultMySQLVersion ..
+	RDSAuroraDefaultMySQLVersion = "5.7"
+
+	// RDSCustomParamGroupClusterName ..
+	RDSCustomParamGroupClusterName = "mattermost-provisioner-rds-cluster-pg"
+
+	// RDSCustomParamGroupName ...
+	RDSCustomParamGroupName = "mattermost-provisioner-rds-pg"
+
+	// RDSDefaultInstanceClass ..
+	RDSDefaultInstanceClass = "db.r5.large"
+
+	// RDSDefaultEngineMode ..
+	RDSDefaultEngineMode = "provisioned"
+
+	// RDSDefaultDatabaseName ..
+	RDSDefaultDatabaseName = "mattermost"
+
+	// RDSDefaultSnapshotType ..
+	RDSDefaultSnapshotType = "manual"
+
+	// RDSStatusAvailable ..
+	RDSStatusAvailable = "available"
+
+	// RDSStatusDeleting ..
+	RDSStatusDeleting = "deleting"
+
+	// RDSStatusCreating ..
+	RDSStatusCreating = "creating"
+
+	// RDSStatusModifying ..
+	RDSStatusModifying = "modifying"
+
+	// RDSDefaultMySQLPort ..
+	RDSDefaultMySQLPort = 3306
+
 	// cloudIDPrefix is the prefix value used when creating AWS resource names.
 	// Warning:
 	// changing this value will break the connection to AWS resources for

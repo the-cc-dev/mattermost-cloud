@@ -1,7 +1,7 @@
 package supervisor
 
 import (
-	awstools "github.com/mattermost/mattermost-cloud/internal/tools/aws"
+	"github.com/mattermost/mattermost-cloud/internal/tools/aws"
 	"github.com/mattermost/mattermost-cloud/internal/tools/utils"
 	"github.com/mattermost/mattermost-cloud/model"
 	log "github.com/sirupsen/logrus"
@@ -28,20 +28,20 @@ type ClusterInstallationMigrationSupervisor struct {
 	clusterSupervisor             *ClusterSupervisor
 	installationSupervisor        *InstallationSupervisor
 	clusterInstallationSupervisor *ClusterInstallationSupervisor
-	aws                           awstools.AWS
+	aws                           *aws.Client
 	logger                        log.FieldLogger
 }
 
 // NewClusterInstallationMigrationSupervisor creates a new ClusterInstallationMigrationSupervisor.
 func NewClusterInstallationMigrationSupervisor(store clusterInstallationMigrationStore, clusterSupervisorInstance *ClusterSupervisor, installationSupervisor *InstallationSupervisor,
-	clusterInstallationSupervisor *ClusterInstallationSupervisor, aws awstools.AWS, instanceID string, logger log.FieldLogger) *ClusterInstallationMigrationSupervisor {
+	clusterInstallationSupervisor *ClusterInstallationSupervisor, awsClient *aws.Client, instanceID string, logger log.FieldLogger) *ClusterInstallationMigrationSupervisor {
 	return &ClusterInstallationMigrationSupervisor{
 		instanceID:                    instanceID,
 		store:                         store,
 		clusterSupervisor:             clusterSupervisorInstance,
 		installationSupervisor:        installationSupervisor,
 		clusterInstallationSupervisor: clusterInstallationSupervisor,
-		aws:                           aws,
+		aws:                           awsClient,
 		logger:                        logger,
 	}
 }
@@ -100,7 +100,7 @@ func (s *ClusterInstallationMigrationSupervisor) Supervise(migration *model.Clus
 // transitionMigration works with the given migration to migration it to a final state.
 func (s *ClusterInstallationMigrationSupervisor) transitionClusterInstallationMigration(migration *model.ClusterInstallationMigration, logger log.FieldLogger) string {
 	switch migration.State {
-	case model.InstallationStateCreationRequested:
+	case model.CIMigrationCreationRequested:
 		return s.createClusterInstallationMigration(migration, logger)
 
 	case model.CIMigrationCreationComplete:
@@ -197,6 +197,62 @@ func (s *ClusterInstallationMigrationSupervisor) createClusterInstallationSnapsh
 	}
 
 	return model.CIMigrationSnapshotCreationIP
+}
+
+func (s *ClusterInstallationMigrationSupervisor) restoreDatabase(migration *model.ClusterInstallationMigration, logger log.FieldLogger) string {
+	clusterInstallation, err := s.clusterInstallationSupervisor.store.GetClusterInstallation(migration.ClusterInstallationID)
+	if err != nil {
+		return model.CIMigrationCreationFailed
+	}
+
+	installation, err := s.installationSupervisor.store.GetInstallation(clusterInstallation.InstallationID)
+	if err != nil {
+		return model.CIMigrationCreationFailed
+	}
+
+	status, err := utils.GetDatabaseMigration(installation, clusterInstallation, s.aws).Restore(logger)
+	if err != nil {
+		logger.Errorf("failed to restore database: %s", err.Error())
+		return model.CIMigrationCreationFailed
+	}
+
+	switch status {
+	case model.DatabaseMigrationReplicaCreationIP:
+		return migration.State
+	case model.DatabaseMigrationReplicaCreationComplete:
+		return model.CIMigrationRestoreDatabaseIP
+	}
+
+	return model.CIMigrationCreationFailed
+}
+
+func (s *ClusterInstallationMigrationSupervisor) waitForDatabase(migration *model.ClusterInstallationMigration, logger log.FieldLogger) string {
+	clusterInstallation, err := s.clusterInstallationSupervisor.store.GetClusterInstallation(migration.ClusterInstallationID)
+	if err != nil {
+		return model.CIMigrationCreationFailed
+	}
+
+	installation, err := s.installationSupervisor.store.GetInstallation(clusterInstallation.InstallationID)
+	if err != nil {
+		return model.CIMigrationCreationFailed
+	}
+
+	databaseStatus, err := utils.GetDatabaseMigration(installation, clusterInstallation, s.aws).Status(logger)
+	if err != nil {
+		logger.Errorf("failed to restore database: %s", err.Error())
+		return model.CIMigrationCreationFailed
+	}
+
+	switch databaseStatus {
+	case model.DatabaseMigrationReplicaProvisionComplete:
+		logger.Debug("database creation complete")
+	case model.DatabaseMigrationReplicaProvisionIP:
+		logger.Debug("database creation is still in progress")
+		return migration.State
+	}
+
+	return model.CIMigrationRestoreDatabaseComplete
+
 }
 
 // func (s *ClusterInstallationMigrationSupervisor) createClusterInstallation(migration *model.ClusterInstallationMigration, logger log.FieldLogger) string {
@@ -314,59 +370,3 @@ func (s *ClusterInstallationMigrationSupervisor) createClusterInstallationSnapsh
 
 // 	return migration.State
 // }
-
-func (s *ClusterInstallationMigrationSupervisor) restoreDatabase(migration *model.ClusterInstallationMigration, logger log.FieldLogger) string {
-	clusterInstallation, err := s.clusterInstallationSupervisor.store.GetClusterInstallation(migration.ClusterInstallationID)
-	if err != nil {
-		return model.CIMigrationCreationFailed
-	}
-
-	installation, err := s.installationSupervisor.store.GetInstallation(clusterInstallation.InstallationID)
-	if err != nil {
-		return model.CIMigrationCreationFailed
-	}
-
-	status, err := utils.GetDatabaseMigration(installation, clusterInstallation).Restore(logger)
-	if err != nil {
-		logger.Errorf("failed to restore database: %s", err.Error())
-		return model.CIMigrationCreationFailed
-	}
-
-	switch status {
-	case model.DatabaseMigrationReplicaCreationIP:
-		return migration.State
-	case model.DatabaseMigrationReplicaCreationComplete:
-		return model.CIMigrationRestoreDatabaseIP
-	}
-
-	return model.CIMigrationCreationFailed
-}
-
-func (s *ClusterInstallationMigrationSupervisor) waitForDatabase(migration *model.ClusterInstallationMigration, logger log.FieldLogger) string {
-	clusterInstallation, err := s.clusterInstallationSupervisor.store.GetClusterInstallation(migration.ClusterInstallationID)
-	if err != nil {
-		return model.CIMigrationCreationFailed
-	}
-
-	installation, err := s.installationSupervisor.store.GetInstallation(clusterInstallation.InstallationID)
-	if err != nil {
-		return model.CIMigrationCreationFailed
-	}
-
-	databaseStatus, err := utils.GetDatabaseMigration(installation, clusterInstallation).Status(logger)
-	if err != nil {
-		logger.Errorf("failed to restore database: %s", err.Error())
-		return model.CIMigrationCreationFailed
-	}
-
-	switch databaseStatus {
-	case model.DatabaseMigrationReplicaProvisionComplete:
-		logger.Debug("database creation complete")
-	case model.DatabaseMigrationReplicaProvisionIP:
-		logger.Debug("database creation is still in progress")
-		return migration.State
-	}
-
-	return model.CIMigrationRestoreDatabaseComplete
-
-}

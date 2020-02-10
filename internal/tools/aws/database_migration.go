@@ -23,15 +23,13 @@ type RDSDatabaseMigration struct {
 }
 
 // NewRDSDatabaseMigration returns a new RDSDatabase interface.
-func NewRDSDatabaseMigration(masterInstallationID, replicaClusterID string) *RDSDatabaseMigration {
+func NewRDSDatabaseMigration(masterInstallationID, replicaClusterID string, awsClient *Client) *RDSDatabaseMigration {
 	database := RDSDatabaseMigration{
+		aws:                awsClient,
 		replicaClusterID:   aws.String(replicaClusterID),
 		replicaDBClusterID: aws.String(fmt.Sprintf("%s-migrated", CloudID(masterInstallationID))),
 		masterDBClusterID:  aws.String(CloudID(masterInstallationID)),
 		masterInstanceName: aws.String(fmt.Sprintf("%s-migrated-master", CloudID(masterInstallationID))),
-
-		// TODO(gsagula): change this after refactoring tools/aws.
-		aws: New(),
 	}
 	return &database
 }
@@ -92,9 +90,6 @@ func (d *RDSDatabaseMigration) Restore(logger log.FieldLogger) (string, error) {
 	if err != nil {
 		errors.Wrap(err, "unabled to restore RDS database")
 	}
-	if *snapshots[0].Status != RDSStatusAvailable {
-		return "", errors.New("unabled to restore RDS database - snapshot is not available")
-	}
 
 	switch *snapshots[0].Status {
 	case RDSStatusCreating:
@@ -124,7 +119,7 @@ func (d *RDSDatabaseMigration) Restore(logger log.FieldLogger) (string, error) {
 
 // Status returns the status of the database.
 func (d *RDSDatabaseMigration) Status(logger log.FieldLogger) (string, error) {
-	dbClusterEndpointsOutput, err := d.aws.describeDBClusterEndpoints(&rds.DescribeDBClusterEndpointsInput{
+	dbClusterEndpointsOutput, err := d.aws.RDS.DescribeDBClusterEndpoints(&rds.DescribeDBClusterEndpointsInput{
 		DBClusterIdentifier: d.replicaDBClusterID,
 	})
 	if err != nil {
@@ -141,11 +136,13 @@ func (d *RDSDatabaseMigration) Status(logger log.FieldLogger) (string, error) {
 		case RDSStatusModifying:
 			return "", errors.Errorf("unabled to check RDS database status: db cluster id %s is being modified", *d.replicaDBClusterID)
 		case RDSStatusDeleting:
+			// TODO(gsagula): we should return these status so we can re-use this
+			// for teardown operation.
 			return "", errors.Errorf("unabled to check RDS database status: db cluster endpoint %s is being deleted", *endpoint.Endpoint)
 		}
 	}
 
-	dbInstancesOutput, err := d.aws.describeDBInstances(&rds.DescribeDBInstancesInput{
+	dbInstancesOutput, err := d.aws.RDS.DescribeDBInstances(&rds.DescribeDBInstancesInput{
 		DBInstanceIdentifier: d.masterInstanceName,
 	})
 	if err != nil {
@@ -162,7 +159,9 @@ func (d *RDSDatabaseMigration) Status(logger log.FieldLogger) (string, error) {
 		case RDSStatusModifying:
 			return "", errors.Errorf("unabled to check RDS database status: db instance id %s is being modified", *d.masterInstanceName)
 		case RDSStatusDeleting:
-			return "", errors.Errorf("unabled to check RDS database status: db instance id is being deleted", *d.masterInstanceName)
+			// TODO(gsagula): we should return these status so we can re-use this
+			// for teardown operation.
+			return "", errors.Errorf("unabled to check RDS database status: db instance id %s is being deleted", *d.masterInstanceName)
 		}
 	}
 

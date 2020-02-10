@@ -103,10 +103,10 @@ func GetDatabase(i *model.Installation) model.Database {
 }
 
 // GetDatabaseMigration returns the Database interface that matches the cluster installation migration.
-func GetDatabaseMigration(installation *model.Installation, clusterInstallation *model.ClusterInstallation) model.DatabaseMigration {
+func GetDatabaseMigration(installation *model.Installation, clusterInstallation *model.ClusterInstallation, awsClient *aws.Client) model.DatabaseMigration {
 	switch installation.Database {
 	case model.InstallationDatabaseAwsRDS:
-		return aws.NewRDSDatabaseMigration(installation.ID, clusterInstallation.ClusterID)
+		return aws.NewRDSDatabaseMigration(installation.ID, clusterInstallation.ClusterID, awsClient)
 	}
 	return &model.NotSupportedDatabaseMigration{}
 }

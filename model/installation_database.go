@@ -2,7 +2,6 @@ package model
 
 import (
 	mmv1alpha1 "github.com/mattermost/mattermost-operator/pkg/apis/mattermost/v1alpha1"
-	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
 )
@@ -45,7 +44,9 @@ func (d *MysqlOperatorDatabase) Provision(store InstallationDatabaseStoreInterfa
 
 // Snapshot is not supported by the operator.
 func (d *MysqlOperatorDatabase) Snapshot(logger log.FieldLogger) error {
-	return errors.New("not implemented")
+	logger.Info("snapshot is not implemented for MySQL operator")
+
+	return nil
 }
 
 // Teardown removes all MySQL operator resources for a given installation.

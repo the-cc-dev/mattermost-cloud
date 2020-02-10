@@ -11,6 +11,9 @@ import (
 	"strings"
 	"time"
 
+	sdk "github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/request"
+	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/gorilla/mux"
 	"github.com/mattermost/mattermost-cloud/internal/api"
 	"github.com/mattermost/mattermost-cloud/internal/provisioner"
@@ -143,26 +146,36 @@ var serverCmd = &cobra.Command{
 			logger,
 		)
 
+		sess, err := session.NewSessionWithOptions(session.Options{
+			Config: sdk.Config{Region: sdk.String(aws.DefaultAWSRegion)},
+		})
+		if err != nil {
+			logger.WithError(err).Error("unable to get create a AWS session")
+		}
+		sess.Handlers.Send.PushFront(func(r *request.Request) {
+			logger.WithField("aws-request", r.ClientInfo.ServiceName).Debugf("%s:%s %s", r.HTTPRequest.Method, r.HTTPRequest.RequestURI, r.Params)
+		})
+		awsClient := aws.NewClient(sess)
+
 		var multiDoer supervisor.MultiDoer
+		var clusterSupervisorInstance *supervisor.ClusterSupervisor
+		var installationSupervisorInstance *supervisor.InstallationSupervisor
+		var clusterInstallSupervisorInstance *supervisor.ClusterInstallationSupervisor
 
-		clusterSupervisorInstance := supervisor.NewClusterSupervisor(sqlStore, kopsProvisioner, aws.New(), instanceID, logger)
-		installationSupervisorInstance := supervisor.NewInstallationSupervisor(sqlStore, kopsProvisioner, aws.New(), instanceID, clusterResourceThreshold, keepDatabaseData, keepFilestoreData, logger)
-		clusterInstallationSupervisorInstance := supervisor.NewClusterInstallationSupervisor(sqlStore, kopsProvisioner, aws.New(), instanceID, logger)
-		clusterInstallationMigrationSupervisorInstance := supervisor.NewClusterInstallationMigrationSupervisor(
-			sqlStore, clusterSupervisorInstance, installationSupervisorInstance,
-			clusterInstallationSupervisorInstance, aws.New(), instanceID, logger)
-
-		if clusterSupervisor {
+		if clusterSupervisor || clusterInstallationMigrationSupervisor {
+			clusterSupervisorInstance = supervisor.NewClusterSupervisor(sqlStore, kopsProvisioner, awsClient, instanceID, logger)
 			multiDoer = append(multiDoer, clusterSupervisorInstance)
 		}
-		if installationSupervisor {
+		if installationSupervisor || clusterInstallationMigrationSupervisor {
+			installationSupervisorInstance = supervisor.NewInstallationSupervisor(sqlStore, kopsProvisioner, awsClient, instanceID, clusterResourceThreshold, keepDatabaseData, keepFilestoreData, logger)
 			multiDoer = append(multiDoer, installationSupervisorInstance)
 		}
-		if clusterInstallationSupervisor {
-			multiDoer = append(multiDoer, clusterInstallationSupervisorInstance)
+		if clusterInstallationSupervisor || clusterInstallationMigrationSupervisor {
+			clusterInstallSupervisorInstance = supervisor.NewClusterInstallationSupervisor(sqlStore, kopsProvisioner, awsClient, instanceID, logger)
+			multiDoer = append(multiDoer, clusterInstallSupervisorInstance)
 		}
 		if clusterInstallationMigrationSupervisor {
-			multiDoer = append(multiDoer, clusterInstallationMigrationSupervisorInstance)
+			multiDoer = append(multiDoer, supervisor.NewClusterInstallationMigrationSupervisor(sqlStore, clusterSupervisorInstance, installationSupervisorInstance, clusterInstallSupervisorInstance, awsClient, instanceID, logger))
 		}
 
 		// Setup the supervisor to effect any requested changes. It is wrapped in a

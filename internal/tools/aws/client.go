@@ -1,9 +1,19 @@
 package aws
 
 import (
+	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/acm"
+	"github.com/aws/aws-sdk-go/service/acm/acmiface"
 	"github.com/aws/aws-sdk-go/service/ec2"
+	"github.com/aws/aws-sdk-go/service/ec2/ec2iface"
+	"github.com/aws/aws-sdk-go/service/iam"
+	"github.com/aws/aws-sdk-go/service/iam/iamiface"
+	"github.com/aws/aws-sdk-go/service/rds"
+	"github.com/aws/aws-sdk-go/service/rds/rdsiface"
 	"github.com/aws/aws-sdk-go/service/route53"
+	"github.com/aws/aws-sdk-go/service/route53/route53iface"
+	"github.com/aws/aws-sdk-go/service/s3"
+	"github.com/aws/aws-sdk-go/service/s3/s3iface"
 	"github.com/mattermost/mattermost-cloud/model"
 	log "github.com/sirupsen/logrus"
 )
@@ -28,11 +38,21 @@ type AWS interface {
 
 // Client is a client for interacting with AWS resources.
 type Client struct {
-	api   api
+	api api
+
+	// TODO(gsagula): this dependencies should be injected.
 	store model.InstallationDatabaseStoreInterface
+
+	ACM     acmiface.ACMAPI
+	EC2     ec2iface.EC2API
+	IAM     iamiface.IAMAPI
+	RDS     rdsiface.RDSAPI
+	S3      s3iface.S3API
+	Route53 route53iface.Route53API
 }
 
 // api mocks out the AWS API calls for testing.
+// TODO(gsagula): this interface should be removed in favour of the ones provided by aws package.
 type api interface {
 	getRoute53Client() (*route53.Route53, error)
 	changeResourceRecordSets(*route53.Route53, *route53.ChangeResourceRecordSetsInput) (*route53.ChangeResourceRecordSetsOutput, error)
@@ -50,7 +70,22 @@ type api interface {
 	listTagsForCertificate(*acm.ACM, *acm.ListTagsForCertificateInput) (*acm.ListTagsForCertificateOutput, error)
 }
 
+// NewClient returns a new AWS client.
+func NewClient(sess *session.Session) *Client {
+	return &Client{
+		api: &apiInterface{},
+
+		ACM:     acm.New(sess),
+		EC2:     ec2.New(sess),
+		IAM:     iam.New(sess),
+		RDS:     rds.New(sess),
+		S3:      s3.New(sess),
+		Route53: route53.New(sess),
+	}
+}
+
 // New returns a new AWS client.
+// TODO(sagula): this should be deprecated
 func New() *Client {
 	return &Client{
 		api: &apiInterface{},

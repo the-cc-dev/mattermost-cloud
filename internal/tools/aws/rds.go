@@ -13,27 +13,6 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-const (
-	AuroraMySQLEngineName    = "aurora-mysql"
-	AuroraMySQLEngineVersion = "5.7"
-	RDSCustomParamGroupName  = "replication-aurora-mysql57"
-	RDSDefaultInstanceClass  = "db.r5.large"
-	RDSDefaultEngineMode     = "provisioned"
-	RDSDefaultDatabaseName   = "mattermost"
-	RDSDefaultSnapshotType   = "manual"
-	RDSStatusAvailable       = "available"
-	RDSStatusDeleting        = "deleting"
-	RDSStatusCreating        = "creating"
-	RDSStatusModifying       = "modifying"
-	RDSDefaultMySQLPort      = 3306
-)
-
-// DBClusterSnapshot holds the information about the snapshot of a RDS database cluster.
-type DBClusterSnapshot struct {
-	SnapshotID string
-	Status     string
-}
-
 func (a *Client) rdsGetDBSecurityGroupIDs(vpcID string, logger log.FieldLogger) ([]string, error) {
 	svc := ec2.New(session.New(), &aws.Config{
 		Region: aws.String(DefaultAWSRegion),
@@ -72,10 +51,6 @@ func (a *Client) rdsGetDBSecurityGroupIDs(vpcID string, logger log.FieldLogger) 
 }
 
 func (a *Client) rdsGetDBSubnetGroupName(vpcID string, logger log.FieldLogger) (string, error) {
-	svc := rds.New(session.New(), &aws.Config{
-		Region: aws.String(DefaultAWSRegion),
-	})
-
 	// TODO:
 	// The subnet group describe functionality does not currently support
 	// filters. Instead, we look up all the subnet groups and match based on
@@ -85,7 +60,7 @@ func (a *Client) rdsGetDBSubnetGroupName(vpcID string, logger log.FieldLogger) (
 	// We should periodically check if filters become supported and move to that
 	// when they do.
 
-	result, err := svc.DescribeDBSubnetGroups(nil)
+	result, err := a.RDS.DescribeDBSubnetGroups(nil)
 	if err != nil {
 		return "", err
 	}
@@ -104,11 +79,7 @@ func (a *Client) rdsGetDBSubnetGroupName(vpcID string, logger log.FieldLogger) (
 }
 
 func (a *Client) rdsEnsureDBClusterCreated(awsID, vpcID, username, password string, logger log.FieldLogger) error {
-	svc := rds.New(session.New(), &aws.Config{
-		Region: aws.String(DefaultAWSRegion),
-	})
-
-	_, err := svc.DescribeDBClusters(&rds.DescribeDBClustersInput{
+	_, err := a.RDS.DescribeDBClusters(&rds.DescribeDBClustersInput{
 		DBClusterIdentifier: aws.String(awsID),
 	})
 	if err == nil {
@@ -137,9 +108,9 @@ func (a *Client) rdsEnsureDBClusterCreated(awsID, vpcID, username, password stri
 		DBClusterIdentifier:         aws.String(awsID),
 		DatabaseName:                aws.String(RDSDefaultDatabaseName),
 		EngineMode:                  aws.String(RDSDefaultEngineMode),
-		Engine:                      aws.String(AuroraMySQLEngineName),
-		DBClusterParameterGroupName: aws.String(RDSCustomParamGroupName),
-		EngineVersion:               aws.String(AuroraMySQLEngineVersion),
+		Engine:                      aws.String(RDSAuroraMySQLEngineName),
+		DBClusterParameterGroupName: aws.String(RDSCustomParamGroupClusterName),
+		EngineVersion:               aws.String(RDSAuroraDefaultMySQLVersion),
 		MasterUserPassword:          aws.String(password),
 		MasterUsername:              aws.String(username),
 		Port:                        aws.Int64(RDSDefaultMySQLPort),
@@ -148,7 +119,7 @@ func (a *Client) rdsEnsureDBClusterCreated(awsID, vpcID, username, password stri
 		VpcSecurityGroupIds:         aws.StringSlice(dbSecurityGroupIDs),
 	}
 
-	_, err = svc.CreateDBCluster(input)
+	_, err = a.RDS.CreateDBCluster(input)
 	if err != nil {
 		return err
 	}
@@ -160,11 +131,8 @@ func (a *Client) rdsEnsureDBClusterCreated(awsID, vpcID, username, password stri
 
 func (a *Client) rdsEnsureDBClusterInstanceCreated(awsID, instanceName string, logger log.FieldLogger) error {
 	logger.Infof("Provisioning AWS RDS master instance with name %s", instanceName)
-	svc := rds.New(session.New(), &aws.Config{
-		Region: aws.String(DefaultAWSRegion),
-	})
 
-	_, err := svc.DescribeDBInstances(&rds.DescribeDBInstancesInput{
+	_, err := a.RDS.DescribeDBInstances(&rds.DescribeDBInstancesInput{
 		DBInstanceIdentifier: aws.String(instanceName),
 	})
 	if err == nil {
@@ -173,12 +141,12 @@ func (a *Client) rdsEnsureDBClusterInstanceCreated(awsID, instanceName string, l
 		return nil
 	}
 
-	_, err = svc.CreateDBInstance(&rds.CreateDBInstanceInput{
+	_, err = a.RDS.CreateDBInstance(&rds.CreateDBInstanceInput{
 		DBClusterIdentifier:  aws.String(awsID),
 		DBInstanceIdentifier: aws.String(instanceName),
 		DBParameterGroupName: aws.String(RDSCustomParamGroupName),
 		DBInstanceClass:      aws.String(RDSDefaultInstanceClass),
-		Engine:               aws.String(AuroraMySQLEngineName),
+		Engine:               aws.String(RDSAuroraMySQLEngineName),
 		PubliclyAccessible:   aws.Bool(false),
 	})
 	if err != nil {
@@ -305,10 +273,6 @@ func (a *Client) listTagsForResource(input *rds.ListTagsForResourceInput) (*rds.
 }
 
 func (a *Client) rdsEnsureRestoreDBClusterFromSnapshot(vpcID, awsID, snapshotID string, logger log.FieldLogger) error {
-	svc := rds.New(session.New(), &aws.Config{
-		Region: aws.String(DefaultAWSRegion),
-	})
-
 	dbSecurityGroupIDs, err := a.rdsGetDBSecurityGroupIDs(vpcID, logger)
 	if err != nil {
 		return errors.Wrapf(err, "failed to restore a DB cluster from snapshot in the vpc id: %s", vpcID)
@@ -319,19 +283,19 @@ func (a *Client) rdsEnsureRestoreDBClusterFromSnapshot(vpcID, awsID, snapshotID 
 		return errors.Wrapf(err, "failed to restore a DB cluster from snapshot in the vpc id: %s", vpcID)
 	}
 
-	_, err = svc.RestoreDBClusterFromSnapshot(&rds.RestoreDBClusterFromSnapshotInput{
+	_, err = a.RDS.RestoreDBClusterFromSnapshot(&rds.RestoreDBClusterFromSnapshotInput{
 		AvailabilityZones: []*string{
 			aws.String("us-east-1a"),
 			aws.String("us-east-1b"),
 			aws.String("us-east-1c"),
 		},
 		DBClusterIdentifier:         aws.String(awsID),
-		DBClusterParameterGroupName: aws.String(RDSCustomParamGroupName),
+		DBClusterParameterGroupName: aws.String(RDSCustomParamGroupClusterName),
 		DBSubnetGroupName:           aws.String(dbSubnetGroupName),
 		DatabaseName:                aws.String(RDSDefaultDatabaseName),
 		EngineMode:                  aws.String(RDSDefaultEngineMode),
-		Engine:                      aws.String(AuroraMySQLEngineName),
-		EngineVersion:               aws.String(AuroraMySQLEngineVersion),
+		Engine:                      aws.String(RDSAuroraMySQLEngineName),
+		EngineVersion:               aws.String(RDSAuroraDefaultMySQLVersion),
 		Port:                        aws.Int64(RDSDefaultMySQLPort),
 		VpcSecurityGroupIds:         aws.StringSlice(dbSecurityGroupIDs),
 		SnapshotIdentifier:          aws.String(snapshotID),
