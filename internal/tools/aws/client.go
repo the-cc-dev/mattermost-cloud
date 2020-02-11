@@ -19,6 +19,9 @@ import (
 )
 
 // AWS interface for use by other packages.
+// TODO(gsagula): Since the client already has all the interfaces needed for testing this methods,
+// they should just be just a pointer to function. Perhaps, when writing tests for this specific package,
+// we should already provide a helper to set the expectations on each of them.
 type AWS interface {
 	GetCertificateSummaryByTag(key, value string) (*acm.CertificateSummary, error)
 
@@ -38,9 +41,10 @@ type AWS interface {
 
 // Client is a client for interacting with AWS resources.
 type Client struct {
+	// TODO(gsagula): this interface should be deprecated.
 	api api
 
-	// TODO(gsagula): this dependencies should be injected.
+	// TODO(gsagula): this dependency should be injected.
 	store model.InstallationDatabaseStoreInterface
 
 	ACM     acmiface.ACMAPI
@@ -58,7 +62,6 @@ type api interface {
 	changeResourceRecordSets(*route53.Route53, *route53.ChangeResourceRecordSetsInput) (*route53.ChangeResourceRecordSetsOutput, error)
 	listResourceRecordSets(*route53.Route53, *route53.ListResourceRecordSetsInput) (*route53.ListResourceRecordSetsOutput, error)
 	listHostedZones(*route53.Route53, *route53.ListHostedZonesInput) (*route53.ListHostedZonesOutput, error)
-	listTagsForResource(*route53.Route53, *route53.ListTagsForResourceInput) (*route53.ListTagsForResourceOutput, error)
 
 	getEC2Client() (*ec2.EC2, error)
 	tagResource(*ec2.EC2, *ec2.CreateTagsInput) (*ec2.CreateTagsOutput, error)

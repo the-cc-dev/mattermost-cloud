@@ -46,17 +46,6 @@ func (api *mockAPI) listHostedZones(*route53.Route53, *route53.ListHostedZonesIn
 	}, api.returnedError
 }
 
-func (api *mockAPI) listTagsForResource(*route53.Route53, *route53.ListTagsForResourceInput) (*route53.ListTagsForResourceOutput, error) {
-	return &route53.ListTagsForResourceOutput{
-		ResourceTagSet: &route53.ResourceTagSet{
-			ResourceId: &testParsedHostedZoneID,
-			Tags: []*route53.Tag{&route53.Tag{
-				Key:   &testParsedRoute53TagKey,
-				Value: &testRoute53TagValue},
-			}},
-	}, api.returnedError
-}
-
 func TestCreateCNAME(t *testing.T) {
 	tests := []struct {
 		name        string

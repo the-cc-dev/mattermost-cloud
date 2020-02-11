@@ -207,7 +207,7 @@ func (a *Client) getHostedZoneIDWithTag(tag Tag) (string, error) {
 				return "", errors.Wrapf(err, "when parsing hosted zone: %s", zone.String())
 			}
 
-			tagList, err := a.api.listTagsForResource(svc, &route53.ListTagsForResourceInput{
+			tagList, err := a.Route53.ListTagsForResource(&route53.ListTagsForResourceInput{
 				ResourceId:   aws.String(id),
 				ResourceType: aws.String(hostedZoneResourceType),
 			})
@@ -259,10 +259,6 @@ func (api *apiInterface) listResourceRecordSets(svc *route53.Route53, input *rou
 
 func (api *apiInterface) listHostedZones(svc *route53.Route53, input *route53.ListHostedZonesInput) (*route53.ListHostedZonesOutput, error) {
 	return svc.ListHostedZones(input)
-}
-
-func (api *apiInterface) listTagsForResource(svc *route53.Route53, input *route53.ListTagsForResourceInput) (*route53.ListTagsForResourceOutput, error) {
-	return svc.ListTagsForResource(input)
 }
 
 func parseHostedZoneResourceID(hostedZone *route53.HostedZone) (string, error) {

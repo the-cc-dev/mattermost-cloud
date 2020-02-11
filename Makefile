@@ -15,11 +15,13 @@ KUBECTL_VERSION=v1.14.0
 ################################################################################
 
 GO ?= $(shell command -v go 2> /dev/null)
+GOPATH ?= $(shell go env GOPATH)
 MATTERMOST_CLOUD_IMAGE ?= mattermost/mattermost-cloud:test
 MACHINE = $(shell uname -m)
 GOFLAGS ?= $(GOFLAGS:)
 BUILD_TIME := $(shell date -u +%Y%m%d.%H%M%S)
 BUILD_HASH := $(shell git rev-parse HEAD)
+AWS_SRC_PATH := $(GOPATH)/src/github.com/aws/aws-sdk-go/service
 
 export GO111MODULE=on
 
@@ -49,6 +51,19 @@ govet:
 ## Builds and thats all :)
 .PHONY: dist
 dist:	build
+
+
+# Generate mocks from the interfaces.
+.PHONY: mocks
+mocks:
+	@env GO111MODULE=off $(GO) get -u github.com/vektra/mockery/.../
+	@env GO111MODULE=off $(GO) get -u github.com/aws/aws-sdk-go/...
+	$(GOPATH)/bin/mockery -dir $(AWS_SRC_PATH)/ec2/ec2iface -all -output ./internal/tools/aws/mocks
+	$(GOPATH)/bin/mockery -dir $(AWS_SRC_PATH)/rds/rdsiface -all -output ./internal/tools/aws/mocks
+	$(GOPATH)/bin/mockery -dir $(AWS_SRC_PATH)/s3/s3iface -all -output ./internal/tools/aws/mocks
+	$(GOPATH)/bin/mockery -dir $(AWS_SRC_PATH)/acm/acmiface -all -output ./internal/tools/aws/mocks
+	$(GOPATH)/bin/mockery -dir $(AWS_SRC_PATH)/iam/iamiface -all -output ./internal/tools/aws/mocks
+	$(GOPATH)/bin/mockery -dir $(AWS_SRC_PATH)/route53/route53iface -all -output ./internal/tools/aws/mocks
 
 .PHONY: build
 build: ## Build the mattermost-cloud
@@ -87,6 +102,7 @@ get-kubectl: ## Download kubectl only if it's not available. Used in the docker 
 		curl -Lo build/kubectl https://storage.googleapis.com/kubernetes-release/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl &&\
 		chmod +x build/kubectl;\
 	fi
+
 
 .PHONY: install
 install: build

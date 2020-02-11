@@ -14,11 +14,7 @@ import (
 )
 
 func (a *Client) rdsGetDBSecurityGroupIDs(vpcID string, logger log.FieldLogger) ([]string, error) {
-	svc := ec2.New(session.New(), &aws.Config{
-		Region: aws.String(DefaultAWSRegion),
-	})
-
-	input := &ec2.DescribeSecurityGroupsInput{
+	result, err := a.EC2.DescribeSecurityGroups(&ec2.DescribeSecurityGroupsInput{
 		Filters: []*ec2.Filter{
 			{
 				Name:   aws.String("vpc-id"),
@@ -29,9 +25,7 @@ func (a *Client) rdsGetDBSecurityGroupIDs(vpcID string, logger log.FieldLogger) 
 				Values: []*string{aws.String(DefaultDBSecurityGroupTagValue)},
 			},
 		},
-	}
-
-	result, err := svc.DescribeSecurityGroups(input)
+	})
 	if err != nil {
 		return []string{}, err
 	}
@@ -178,11 +172,7 @@ func rdsGetDBCluster(awsID string, logger log.FieldLogger) (*rds.DBCluster, erro
 }
 
 func (a *Client) rdsEnsureDBClusterDeleted(awsID string, logger log.FieldLogger) error {
-	svc := rds.New(session.New(), &aws.Config{
-		Region: aws.String(DefaultAWSRegion),
-	})
-
-	result, err := svc.DescribeDBClusters(&rds.DescribeDBClustersInput{
+	result, err := a.RDS.DescribeDBClusters(&rds.DescribeDBClustersInput{
 		DBClusterIdentifier: aws.String(awsID),
 	})
 	if err != nil {
@@ -206,7 +196,7 @@ func (a *Client) rdsEnsureDBClusterDeleted(awsID string, logger log.FieldLogger)
 	}
 
 	for _, instance := range cluster.DBClusterMembers {
-		_, err = svc.DeleteDBInstance(&rds.DeleteDBInstanceInput{
+		_, err = a.RDS.DeleteDBInstance(&rds.DeleteDBInstanceInput{
 			DBInstanceIdentifier: instance.DBInstanceIdentifier,
 			SkipFinalSnapshot:    aws.Bool(true),
 		})
@@ -216,7 +206,7 @@ func (a *Client) rdsEnsureDBClusterDeleted(awsID string, logger log.FieldLogger)
 		logger.WithField("db-instance-name", *instance.DBInstanceIdentifier).Debug("DB instance deleted")
 	}
 
-	_, err = svc.DeleteDBCluster(&rds.DeleteDBClusterInput{
+	_, err = a.RDS.DeleteDBCluster(&rds.DeleteDBClusterInput{
 		DBClusterIdentifier: aws.String(awsID),
 		SkipFinalSnapshot:   aws.Bool(true),
 	})
@@ -230,11 +220,7 @@ func (a *Client) rdsEnsureDBClusterDeleted(awsID string, logger log.FieldLogger)
 }
 
 func (a *Client) rdsEnsureDBClusterSnapshotCreated(awsID string, tags []*rds.Tag) error {
-	svc := rds.New(session.New(), &aws.Config{
-		Region: aws.String(DefaultAWSRegion),
-	})
-
-	_, err := svc.CreateDBClusterSnapshot(&rds.CreateDBClusterSnapshotInput{
+	_, err := a.RDS.CreateDBClusterSnapshot(&rds.CreateDBClusterSnapshotInput{
 		DBClusterIdentifier:         aws.String(awsID),
 		DBClusterSnapshotIdentifier: aws.String(fmt.Sprintf("%s-snapshot-%s", awsID, model.NewID())),
 		Tags:                        tags,
@@ -244,32 +230,6 @@ func (a *Client) rdsEnsureDBClusterSnapshotCreated(awsID string, tags []*rds.Tag
 	}
 
 	return nil
-}
-
-func (a *Client) describeDBClusterSnapshots(input *rds.DescribeDBClusterSnapshotsInput) (*rds.DescribeDBClusterSnapshotsOutput, error) {
-	svc := rds.New(session.New(), &aws.Config{
-		Region: aws.String(DefaultAWSRegion),
-	})
-
-	dbClusterSnapshotsOut, err := svc.DescribeDBClusterSnapshots(input)
-	if err != nil {
-		return nil, err
-	}
-
-	return dbClusterSnapshotsOut, nil
-}
-
-func (a *Client) listTagsForResource(input *rds.ListTagsForResourceInput) (*rds.ListTagsForResourceOutput, error) {
-	svc := rds.New(session.New(), &aws.Config{
-		Region: aws.String(DefaultAWSRegion),
-	})
-
-	listTagsForResourceOut, err := svc.ListTagsForResource(input)
-	if err != nil {
-		return nil, err
-	}
-
-	return listTagsForResourceOut, nil
 }
 
 func (a *Client) rdsEnsureRestoreDBClusterFromSnapshot(vpcID, awsID, snapshotID string, logger log.FieldLogger) error {
@@ -305,32 +265,4 @@ func (a *Client) rdsEnsureRestoreDBClusterFromSnapshot(vpcID, awsID, snapshotID 
 	}
 
 	return nil
-}
-
-func (a *Client) describeDBClusterEndpoints(input *rds.DescribeDBClusterEndpointsInput) (*rds.DescribeDBClusterEndpointsOutput, error) {
-	svc := rds.New(session.New(), &aws.Config{
-		Region: aws.String(DefaultAWSRegion),
-	})
-
-	dbClusterEndpointsOutput, err := svc.DescribeDBClusterEndpoints(input)
-
-	if err != nil {
-		return nil, err
-	}
-
-	return dbClusterEndpointsOutput, nil
-}
-
-func (a *Client) describeDBInstances(input *rds.DescribeDBInstancesInput) (*rds.DescribeDBInstancesOutput, error) {
-	svc := rds.New(session.New(), &aws.Config{
-		Region: aws.String(DefaultAWSRegion),
-	})
-
-	dbInstancesOutput, err := svc.DescribeDBInstances(input)
-
-	if err != nil {
-		return nil, err
-	}
-
-	return dbInstancesOutput, nil
 }

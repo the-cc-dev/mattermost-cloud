@@ -29,7 +29,15 @@ func NewRDSDatabase(installationID string) *RDSDatabase {
 
 // Provision completes all the steps necessary to provision a RDS database.
 func (d *RDSDatabase) Provision(store model.InstallationDatabaseStoreInterface, logger log.FieldLogger) error {
-	awsClient := New()
+	// TODO(gsagula): this is very temporary
+	sess, err := CreateSession(logger, SessionConfig{
+		Region:  DefaultAWSRegion,
+		Retries: 3,
+	})
+	if err != nil {
+		return err
+	}
+	awsClient := NewClient(sess)
 	awsClient.AddSQLStore(store)
 
 	awsID := CloudID(d.installationID)
@@ -58,8 +66,16 @@ func (d *RDSDatabase) Provision(store model.InstallationDatabaseStoreInterface, 
 
 // Snapshot takes a snapshot of the RDS database.
 func (d *RDSDatabase) Snapshot(logger log.FieldLogger) error {
-	awsClient := New()
-	err := awsClient.rdsEnsureDBClusterSnapshotCreated(CloudID(d.installationID), []*rds.Tag{&rds.Tag{
+	// TODO(gsagula): this is very temporary
+	sess, err := CreateSession(logger, SessionConfig{
+		Region:  DefaultAWSRegion,
+		Retries: 3,
+	})
+	if err != nil {
+		return err
+	}
+	awsClient := NewClient(sess)
+	err = awsClient.rdsEnsureDBClusterSnapshotCreated(CloudID(d.installationID), []*rds.Tag{&rds.Tag{
 		Key:   aws.String(DefaultClusterInstallationSnapshotTagKey),
 		Value: aws.String(fmt.Sprintf(DefaultClusterInstallationSnapshotTagValueTemplate, CloudID(d.installationID))),
 	}})
@@ -124,16 +140,24 @@ func (d *RDSDatabase) GenerateDatabaseSpecAndSecret(logger log.FieldLogger) (*mm
 func rdsDatabaseTeardown(installationID string, keepData bool, logger log.FieldLogger) error {
 	logger.Info("Tearing down AWS RDS database")
 
-	a := New()
+	sess, err := CreateSession(logger, SessionConfig{
+		Region:  DefaultAWSRegion,
+		Retries: 3,
+	})
+	if err != nil {
+		logger.WithError(err).Error("unable to get create a AWS session")
+	}
+	awsClient := NewClient(sess)
+
 	awsID := CloudID(installationID)
 
-	err := a.secretsManagerEnsureRDSSecretDeleted(awsID, logger)
+	err = awsClient.secretsManagerEnsureRDSSecretDeleted(awsID, logger)
 	if err != nil {
 		return errors.Wrap(err, "unable to delete RDS secret")
 	}
 
 	if !keepData {
-		err = a.rdsEnsureDBClusterDeleted(awsID, logger)
+		err = awsClient.rdsEnsureDBClusterDeleted(awsID, logger)
 		if err != nil {
 			return errors.Wrap(err, "unable to delete RDS DB cluster")
 		}

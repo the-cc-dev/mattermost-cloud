@@ -54,7 +54,7 @@ func (d *RDSDatabaseMigration) Restore(logger log.FieldLogger) (string, error) {
 		return "", errors.Errorf("unabled to restore RDS database: expected 1 VPC in cluster id %s, but got %d", *d.replicaDBClusterID, len(vpcs))
 	}
 
-	dbClusterSnapshotsOut, err := d.aws.describeDBClusterSnapshots(&rds.DescribeDBClusterSnapshotsInput{
+	dbClusterSnapshotsOut, err := d.aws.RDS.DescribeDBClusterSnapshots(&rds.DescribeDBClusterSnapshotsInput{
 		SnapshotType: aws.String(RDSDefaultSnapshotType),
 	})
 	if err != nil {
@@ -65,7 +65,7 @@ func (d *RDSDatabaseMigration) Restore(logger log.FieldLogger) (string, error) {
 
 	var snapshots []*rds.DBClusterSnapshot
 	for _, snapshot := range dbClusterSnapshotsOut.DBClusterSnapshots {
-		tags, err := d.aws.listTagsForResource(&rds.ListTagsForResourceInput{
+		tags, err := d.aws.RDS.ListTagsForResource(&rds.ListTagsForResourceInput{
 			ResourceName: snapshot.DBClusterSnapshotArn,
 		})
 		if err != nil {

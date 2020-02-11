@@ -11,9 +11,6 @@ import (
 	"strings"
 	"time"
 
-	sdk "github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/request"
-	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/gorilla/mux"
 	"github.com/mattermost/mattermost-cloud/internal/api"
 	"github.com/mattermost/mattermost-cloud/internal/provisioner"
@@ -146,15 +143,14 @@ var serverCmd = &cobra.Command{
 			logger,
 		)
 
-		sess, err := session.NewSessionWithOptions(session.Options{
-			Config: sdk.Config{Region: sdk.String(aws.DefaultAWSRegion)},
+		sess, err := aws.CreateSession(logger, aws.SessionConfig{
+			// TODO(gsagula): aws session may just want to use whatever the environment provides in the future.
+			Region:  aws.DefaultAWSRegion,
+			Retries: 3,
 		})
 		if err != nil {
 			logger.WithError(err).Error("unable to get create a AWS session")
 		}
-		sess.Handlers.Send.PushFront(func(r *request.Request) {
-			logger.WithField("aws-request", r.ClientInfo.ServiceName).Debugf("%s:%s %s", r.HTTPRequest.Method, r.HTTPRequest.RequestURI, r.Params)
-		})
 		awsClient := aws.NewClient(sess)
 
 		var multiDoer supervisor.MultiDoer
