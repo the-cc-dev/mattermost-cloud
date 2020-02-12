@@ -116,7 +116,7 @@ func (provisioner *KopsProvisioner) CreateClusterInstallation(cluster *model.Clu
 		mattermostInstallation.Spec.Database = *databaseSpec
 	}
 
-	filestoreSpec, filestoreSecret, err := utils.GetFilestore(installation).GenerateFilestoreSpecAndSecret(logger)
+	filestoreSpec, filestoreSecret, err := utils.GetFilestore(installation, provisioner.awsClient).GenerateFilestoreSpecAndSecret(logger)
 	if err != nil {
 		return err
 	}

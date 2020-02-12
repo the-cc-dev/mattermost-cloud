@@ -75,12 +75,12 @@ func copyFile(source string, dest string) error {
 }
 
 // GetFilestore returns the Filestore interface that matches the installation.
-func GetFilestore(i *model.Installation) model.Filestore {
+func GetFilestore(i *model.Installation, awsClient *aws.Client) model.Filestore {
 	switch i.Filestore {
 	case model.InstallationFilestoreMinioOperator:
 		return model.NewMinioOperatorFilestore()
 	case model.InstallationFilestoreAwsS3:
-		return aws.NewS3Filestore(i.ID)
+		return aws.NewS3Filestore(i.ID, awsClient)
 	}
 
 	return &model.UnsupportedFilestore{}

@@ -28,7 +28,7 @@ type utilityGroup struct {
 	provisioner *KopsProvisioner
 }
 
-func newUtilityGroupHandle(kops *kops.Cmd, provisioner *KopsProvisioner, cluster *model.Cluster, awsClient aws.AWS, parentLogger log.FieldLogger) (*utilityGroup, error) {
+func newUtilityGroupHandle(kops *kops.Cmd, provisioner *KopsProvisioner, cluster *model.Cluster, awsClient *aws.Client, parentLogger log.FieldLogger) (*utilityGroup, error) {
 	logger := parentLogger.WithField("utility-group", "create-handle")
 
 	nginx, err := newNginxHandle(provisioner, kops, logger)

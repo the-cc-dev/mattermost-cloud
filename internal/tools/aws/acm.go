@@ -9,17 +9,12 @@ import (
 
 // GetCertificateSummaryByTag returns the certificate summary associated with a valid tag key and value in AWS.
 func (a *Client) GetCertificateSummaryByTag(key, value string) (*acm.CertificateSummary, error) {
-	svc, err := a.api.getACMClient()
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to get ACM client")
-	}
-
 	key = trimTagPrefix(key)
 	tag := acm.Tag{Key: &key, Value: &value}
 
 	var next *string
 	for {
-		out, err := a.api.listCertificates(svc, &acm.ListCertificatesInput{
+		out, err := a.ACM.ListCertificates(&acm.ListCertificatesInput{
 			NextToken: next,
 		})
 		if err != nil {
@@ -27,7 +22,7 @@ func (a *Client) GetCertificateSummaryByTag(key, value string) (*acm.Certificate
 		}
 
 		for _, cert := range out.CertificateSummaryList {
-			list, err := a.api.listTagsForCertificate(svc, &acm.ListTagsForCertificateInput{CertificateArn: cert.CertificateArn})
+			list, err := a.ACM.ListTagsForCertificate(&acm.ListTagsForCertificateInput{CertificateArn: cert.CertificateArn})
 			if err != nil {
 				return nil, errors.Wrapf(err, "error listing tags for certificate %s", *cert.CertificateArn)
 			}

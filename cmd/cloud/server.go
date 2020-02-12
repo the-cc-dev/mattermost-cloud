@@ -135,14 +135,14 @@ var serverCmd = &cobra.Command{
 		owner := getHumanReadableID()
 
 		sess, err := aws.CreateSession(logger, aws.SessionConfig{
-			// TODO(gsagula): aws session may just want to use whatever the environment provides in the future.
+			// TODO(gsagula): aws session may just want to use whatever is set in the environment.
 			Region:  aws.DefaultAWSRegion,
 			Retries: 3,
 		})
 		if err != nil {
 			logger.WithError(err).Error("unable to get create a AWS session")
 		}
-		awsClient := aws.NewClient(sess)
+		awsClient := aws.NewClient(sess, "us-east-1a", "us-east-1b", "us-east-1c")
 
 		// Setup the provisioner for actually effecting changes to clusters.
 		kopsProvisioner := provisioner.NewKopsProvisioner(

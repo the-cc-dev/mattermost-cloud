@@ -38,3 +38,12 @@ func newRandomPassword(length int) string {
 
 	return string(b)
 }
+
+// PointerToStringArray transforms an array of string to an array of pointers to string.
+func PointerToStringArray(vs []string, f func(string) *string) []*string {
+	vsm := make([]*string, len(vs))
+	for i, v := range vs {
+		vsm[i] = f(v)
+	}
+	return vsm
+}

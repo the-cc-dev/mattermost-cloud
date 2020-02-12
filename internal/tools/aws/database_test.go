@@ -20,10 +20,14 @@ func TestDatabaseProvision(t *testing.T) {
 	}
 
 	logger := logrus.New()
-	database := NewRDSDatabase(id)
-
-	err := database.Provision(nil, logger)
+	sess, err := CreateSession(logger, SessionConfig{
+		Region:  DefaultAWSRegion,
+		Retries: 3,
+	})
 	require.NoError(t, err)
+
+	database := NewRDSDatabase(id, NewClient(sess))
+	require.NoError(t, database.Provision(nil, logger))
 }
 
 func TestDatabaseTeardown(t *testing.T) {
@@ -33,8 +37,12 @@ func TestDatabaseTeardown(t *testing.T) {
 	}
 
 	logger := logrus.New()
-	database := NewRDSDatabase(id)
-
-	err := database.Teardown(false, logger)
+	sess, err := CreateSession(logger, SessionConfig{
+		Region:  DefaultAWSRegion,
+		Retries: 3,
+	})
 	require.NoError(t, err)
+
+	database := NewRDSDatabase(id, NewClient(sess))
+	require.NoError(t, database.Teardown(false, logger))
 }

@@ -25,10 +25,10 @@ type clusterStore interface {
 // clusterProvisioner abstracts the provisioning operations required by the cluster supervisor.
 type clusterProvisioner interface {
 	PrepareCluster(cluster *model.Cluster) (bool, error)
-	CreateCluster(cluster *model.Cluster, aws aws.AWS) error
-	ProvisionCluster(cluster *model.Cluster, aws aws.AWS) error
+	CreateCluster(cluster *model.Cluster) error
+	ProvisionCluster(cluster *model.Cluster) error
 	UpgradeCluster(cluster *model.Cluster) error
-	DeleteCluster(cluster *model.Cluster, aws aws.AWS) error
+	DeleteCluster(cluster *model.Cluster) error
 	GetClusterVersion(cluster *model.Cluster) (string, error)
 }
 
@@ -37,19 +37,19 @@ type clusterProvisioner interface {
 // The degree of parallelism is controlled by a weighted semaphore, intended to be shared with
 // other clients needing to coordinate background jobs.
 type ClusterSupervisor struct {
+	instanceID  string
 	store       clusterStore
 	provisioner clusterProvisioner
-	aws         aws.AWS
-	instanceID  string
 	logger      log.FieldLogger
+	awsClient   *aws.Client
 }
 
 // NewClusterSupervisor creates a new ClusterSupervisor.
-func NewClusterSupervisor(store clusterStore, clusterProvisioner clusterProvisioner, aws aws.AWS, instanceID string, logger log.FieldLogger) *ClusterSupervisor {
+func NewClusterSupervisor(store clusterStore, clusterProvisioner clusterProvisioner, awsClient *aws.Client, instanceID string, logger log.FieldLogger) *ClusterSupervisor {
 	return &ClusterSupervisor{
 		store:       store,
 		provisioner: clusterProvisioner,
-		aws:         aws,
+		awsClient:   awsClient,
 		instanceID:  instanceID,
 		logger:      logger,
 	}
@@ -151,13 +151,13 @@ func (s *ClusterSupervisor) createCluster(cluster *model.Cluster, logger log.Fie
 		}
 	}
 
-	err = s.provisioner.CreateCluster(cluster, s.aws)
+	err = s.provisioner.CreateCluster(cluster)
 	if err != nil {
 		logger.WithError(err).Error("Failed to create cluster")
 		return model.ClusterStateCreationFailed
 	}
 
-	err = s.provisioner.ProvisionCluster(cluster, s.aws)
+	err = s.provisioner.ProvisionCluster(cluster)
 	if err != nil {
 		logger.WithError(err).Error("Failed to provision cluster")
 		return model.ClusterStateProvisioningFailed
@@ -183,7 +183,7 @@ func (s *ClusterSupervisor) createCluster(cluster *model.Cluster, logger log.Fie
 }
 
 func (s *ClusterSupervisor) provisionCluster(cluster *model.Cluster, logger log.FieldLogger) string {
-	err := s.provisioner.ProvisionCluster(cluster, s.aws)
+	err := s.provisioner.ProvisionCluster(cluster)
 	if err != nil {
 		logger.WithError(err).Error("Failed to provision cluster")
 		return model.ClusterStateProvisioningFailed
@@ -235,7 +235,7 @@ func (s *ClusterSupervisor) upgradeCluster(cluster *model.Cluster, logger log.Fi
 }
 
 func (s *ClusterSupervisor) deleteCluster(cluster *model.Cluster, logger log.FieldLogger) string {
-	err := s.provisioner.DeleteCluster(cluster, s.aws)
+	err := s.provisioner.DeleteCluster(cluster)
 	if err != nil {
 		logger.WithError(err).Error("Failed to delete cluster")
 		return model.ClusterStateDeletionFailed

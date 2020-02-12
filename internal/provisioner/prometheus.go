@@ -12,14 +12,14 @@ import (
 )
 
 type prometheus struct {
-	awsClient   aws.AWS
+	awsClient   *aws.Client
 	cluster     *model.Cluster
 	kops        *kops.Cmd
-	logger      log.FieldLogger
 	provisioner *KopsProvisioner
+	logger      log.FieldLogger
 }
 
-func newPrometheusHandle(cluster *model.Cluster, provisioner *KopsProvisioner, awsClient aws.AWS, kops *kops.Cmd, logger log.FieldLogger) (*prometheus, error) {
+func newPrometheusHandle(cluster *model.Cluster, provisioner *KopsProvisioner, awsClient *aws.Client, kops *kops.Cmd, logger log.FieldLogger) (*prometheus, error) {
 	if logger == nil {
 		return nil, fmt.Errorf("cannot instantiate Prometheus handle with nil logger")
 	}

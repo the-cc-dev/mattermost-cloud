@@ -24,14 +24,14 @@ const DefaultKubernetesVersion = "0.0.0"
 
 // KopsProvisioner provisions clusters using kops+terraform.
 type KopsProvisioner struct {
+	useExistingAWSResources bool
 	s3StateStore            string
 	privateSubnetIds        string
 	publicSubnetIds         string
 	privateDNS              string
-	useExistingAWSResources bool
-	logger                  log.FieldLogger
-	awsClient               *aws.Client
 	owner                   string
+	awsClient               *aws.Client
+	logger                  log.FieldLogger
 }
 
 // NewKopsProvisioner creates a new KopsProvisioner.
@@ -66,7 +66,7 @@ func (provisioner *KopsProvisioner) PrepareCluster(cluster *model.Cluster) (bool
 }
 
 // CreateCluster creates a cluster using kops and terraform.
-func (provisioner *KopsProvisioner) CreateCluster(cluster *model.Cluster, awsClient aws.AWS) error {
+func (provisioner *KopsProvisioner) CreateCluster(cluster *model.Cluster) error {
 	kopsMetadata, err := model.NewKopsMetadata(cluster.ProvisionerMetadata)
 	if err != nil {
 		return errors.Wrap(err, "failed to parse provisioner metadata")
@@ -79,7 +79,7 @@ func (provisioner *KopsProvisioner) CreateCluster(cluster *model.Cluster, awsCli
 		return errors.Wrap(err, "failed to parse provider metadata")
 	}
 
-	isAMIValid, err := awsClient.IsValidAMI(kopsMetadata.AMI)
+	isAMIValid, err := provisioner.awsClient.IsValidAMI(kopsMetadata.AMI)
 	if err != nil {
 		return errors.Wrapf(err, "Error checking the AWS AMI Image %s", kopsMetadata.AMI)
 	}
@@ -101,7 +101,7 @@ func (provisioner *KopsProvisioner) CreateCluster(cluster *model.Cluster, awsCli
 
 	var clusterResources aws.ClusterResources
 	if provisioner.useExistingAWSResources {
-		clusterResources, err = awsClient.GetAndClaimVpcResources(cluster.ID, provisioner.owner, logger)
+		clusterResources, err = provisioner.awsClient.GetAndClaimVpcResources(cluster.ID, provisioner.owner, logger)
 		if err != nil {
 			return err
 		}
@@ -120,7 +120,7 @@ func (provisioner *KopsProvisioner) CreateCluster(cluster *model.Cluster, awsCli
 		clusterResources.WorkerSecurityGroupIDs,
 	)
 	if err != nil {
-		releaseErr := awsClient.ReleaseVpc(cluster.ID, logger)
+		releaseErr := provisioner.awsClient.ReleaseVpc(cluster.ID, logger)
 		if releaseErr != nil {
 			logger.WithError(releaseErr).Error("Unable to release VPC")
 		}
@@ -172,7 +172,7 @@ func (provisioner *KopsProvisioner) CreateCluster(cluster *model.Cluster, awsCli
 
 	logger.WithField("name", kopsMetadata.Name).Info("Successfully deployed kubernetes")
 
-	ugh, err := newUtilityGroupHandle(kops, provisioner, cluster, awsClient, logger)
+	ugh, err := newUtilityGroupHandle(kops, provisioner, cluster, provisioner.awsClient, logger)
 	if err != nil {
 		return err
 	}
@@ -183,7 +183,7 @@ func (provisioner *KopsProvisioner) CreateCluster(cluster *model.Cluster, awsCli
 // ProvisionCluster installs all the baseline kubernetes resources needed for
 // managing installations. This can be called on an already-provisioned cluster
 // to reprovision with the newest version of the resources.
-func (provisioner *KopsProvisioner) ProvisionCluster(cluster *model.Cluster, awsClient aws.AWS) error {
+func (provisioner *KopsProvisioner) ProvisionCluster(cluster *model.Cluster) error {
 	logger := provisioner.logger.WithField("cluster", cluster.ID)
 
 	kops, err := kops.New(provisioner.s3StateStore, logger)
@@ -326,7 +326,7 @@ func (provisioner *KopsProvisioner) ProvisionCluster(cluster *model.Cluster, aws
 		}
 	}
 
-	ugh, err := newUtilityGroupHandle(kops, provisioner, cluster, awsClient, logger)
+	ugh, err := newUtilityGroupHandle(kops, provisioner, cluster, provisioner.awsClient, logger)
 	if err != nil {
 		return errors.Wrap(err, "failed to create new cluster utility group handle")
 	}
@@ -431,7 +431,7 @@ func (provisioner *KopsProvisioner) UpgradeCluster(cluster *model.Cluster) error
 }
 
 // DeleteCluster deletes a previously created cluster using kops and terraform.
-func (provisioner *KopsProvisioner) DeleteCluster(cluster *model.Cluster, awsClient aws.AWS) error {
+func (provisioner *KopsProvisioner) DeleteCluster(cluster *model.Cluster) error {
 	kopsMetadata, err := model.NewKopsMetadata(cluster.ProvisionerMetadata)
 	if err != nil {
 		return errors.Wrap(err, "failed to parse provisioner metadata")
@@ -495,12 +495,12 @@ func (provisioner *KopsProvisioner) DeleteCluster(cluster *model.Cluster, awsCli
 		}
 	}
 
-	err = awsClient.ReleaseVpc(cluster.ID, logger)
+	err = provisioner.awsClient.ReleaseVpc(cluster.ID, logger)
 	if err != nil {
 		return errors.Wrap(err, "unable to release VPC")
 	}
 
-	ugh, err := newUtilityGroupHandle(kops, provisioner, cluster, awsClient, logger)
+	ugh, err := newUtilityGroupHandle(kops, provisioner, cluster, provisioner.awsClient, logger)
 	if err != nil {
 		return errors.Wrap(err, "couldn't greate new utility group handle while deleting the cluster")
 	}

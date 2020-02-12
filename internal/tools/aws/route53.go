@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/route53"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
@@ -56,11 +55,6 @@ func (a *Client) createCNAME(hostedZoneID, dnsName string, dnsEndpoints []string
 		}
 	}
 
-	svc, err := a.api.getRoute53Client()
-	if err != nil {
-		return err
-	}
-
 	var resourceRecords []*route53.ResourceRecord
 	for _, endpoint := range dnsEndpoints {
 		resourceRecords = append(resourceRecords, &route53.ResourceRecord{
@@ -68,7 +62,7 @@ func (a *Client) createCNAME(hostedZoneID, dnsName string, dnsEndpoints []string
 		})
 	}
 
-	input := &route53.ChangeResourceRecordSetsInput{
+	resp, err := a.Route53.ChangeResourceRecordSets(&route53.ChangeResourceRecordSetsInput{
 		ChangeBatch: &route53.ChangeBatch{
 			Changes: []*route53.Change{
 				{
@@ -85,9 +79,7 @@ func (a *Client) createCNAME(hostedZoneID, dnsName string, dnsEndpoints []string
 			},
 		},
 		HostedZoneId: &hostedZoneID,
-	}
-
-	resp, err := a.api.changeResourceRecordSets(svc, input)
+	})
 	if err != nil {
 		return err
 	}
@@ -128,19 +120,13 @@ func (a *Client) DeletePrivateCNAME(dnsName string, logger log.FieldLogger) erro
 }
 
 func (a *Client) deleteCNAME(hostedZoneID, dnsName string, logger log.FieldLogger) error {
-	svc, err := a.api.getRoute53Client()
-	if err != nil {
-		return err
-	}
-
 	nextRecordName := dnsName
 	var recordsets []*route53.ResourceRecordSet
 	for {
-		recordList, err := a.api.listResourceRecordSets(svc,
-			&route53.ListResourceRecordSetsInput{
-				HostedZoneId:    &hostedZoneID,
-				StartRecordName: &nextRecordName,
-			})
+		recordList, err := a.Route53.ListResourceRecordSets(&route53.ListResourceRecordSetsInput{
+			HostedZoneId:    &hostedZoneID,
+			StartRecordName: &nextRecordName,
+		})
 		if err != nil {
 			return err
 		}
@@ -170,11 +156,10 @@ func (a *Client) deleteCNAME(hostedZoneID, dnsName string, logger log.FieldLogge
 		return nil
 	}
 
-	input := &route53.ChangeResourceRecordSetsInput{
+	resp, err := a.Route53.ChangeResourceRecordSets(&route53.ChangeResourceRecordSetsInput{
 		ChangeBatch:  &route53.ChangeBatch{Changes: changes},
 		HostedZoneId: &hostedZoneID,
-	}
-	resp, err := a.api.changeResourceRecordSets(svc, input)
+	})
 	if err != nil {
 		return err
 	}
@@ -189,14 +174,9 @@ func (a *Client) deleteCNAME(hostedZoneID, dnsName string, logger log.FieldLogge
 }
 
 func (a *Client) getHostedZoneIDWithTag(tag Tag) (string, error) {
-	svc, err := a.api.getRoute53Client()
-	if err != nil {
-		return "", err
-	}
-
 	var next *string
 	for {
-		zoneList, err := a.api.listHostedZones(svc, &route53.ListHostedZonesInput{Marker: next})
+		zoneList, err := a.Route53.ListHostedZones(&route53.ListHostedZonesInput{Marker: next})
 		if err != nil {
 			return "", errors.Wrapf(err, "listing hosted all zones")
 		}
@@ -238,27 +218,6 @@ func prettyRoute53Response(resp *route53.ChangeResourceRecordSetsOutput) string 
 	}
 
 	return string(prettyResp)
-}
-
-func (api *apiInterface) getRoute53Client() (*route53.Route53, error) {
-	sess, err := session.NewSession()
-	if err != nil {
-		return nil, err
-	}
-
-	return route53.New(sess), nil
-}
-
-func (api *apiInterface) changeResourceRecordSets(svc *route53.Route53, input *route53.ChangeResourceRecordSetsInput) (*route53.ChangeResourceRecordSetsOutput, error) {
-	return svc.ChangeResourceRecordSets(input)
-}
-
-func (api *apiInterface) listResourceRecordSets(svc *route53.Route53, input *route53.ListResourceRecordSetsInput) (*route53.ListResourceRecordSetsOutput, error) {
-	return svc.ListResourceRecordSets(input)
-}
-
-func (api *apiInterface) listHostedZones(svc *route53.Route53, input *route53.ListHostedZonesInput) (*route53.ListHostedZonesOutput, error) {
-	return svc.ListHostedZones(input)
 }
 
 func parseHostedZoneResourceID(hostedZone *route53.HostedZone) (string, error) {

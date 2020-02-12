@@ -93,11 +93,7 @@ func (a *Client) rdsEnsureDBClusterCreated(awsID, vpcID, username, password stri
 	}
 
 	input := &rds.CreateDBClusterInput{
-		AvailabilityZones: []*string{
-			aws.String("us-east-1a"),
-			aws.String("us-east-1b"),
-			aws.String("us-east-1c"),
-		},
+		AvailabilityZones:           a.AvailabilityZones,
 		BackupRetentionPeriod:       aws.Int64(7),
 		DBClusterIdentifier:         aws.String(awsID),
 		DatabaseName:                aws.String(RDSDefaultDatabaseName),
@@ -244,11 +240,7 @@ func (a *Client) rdsEnsureRestoreDBClusterFromSnapshot(vpcID, awsID, snapshotID 
 	}
 
 	_, err = a.RDS.RestoreDBClusterFromSnapshot(&rds.RestoreDBClusterFromSnapshotInput{
-		AvailabilityZones: []*string{
-			aws.String("us-east-1a"),
-			aws.String("us-east-1b"),
-			aws.String("us-east-1c"),
-		},
+		AvailabilityZones:           a.AvailabilityZones,
 		DBClusterIdentifier:         aws.String(awsID),
 		DBClusterParameterGroupName: aws.String(RDSCustomParamGroupClusterName),
 		DBSubnetGroupName:           aws.String(dbSubnetGroupName),

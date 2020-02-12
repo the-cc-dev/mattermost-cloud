@@ -332,7 +332,7 @@ func (s *InstallationSupervisor) preProvisionInstallation(installation *model.In
 		return model.InstallationStateCreationPreProvisioning
 	}
 
-	err = utils.GetFilestore(installation).Provision(logger)
+	err = utils.GetFilestore(installation, s.awsClient).Provision(logger)
 	if err != nil {
 		logger.WithError(err).Error("Failed to provision installation filestore")
 		return model.InstallationStateCreationPreProvisioning
@@ -654,7 +654,7 @@ func (s *InstallationSupervisor) finalDeletionCleanup(installation *model.Instal
 		return model.InstallationStateDeletionFinalCleanup
 	}
 
-	err = utils.GetFilestore(installation).Teardown(s.keepFilestoreData, logger)
+	err = utils.GetFilestore(installation, s.awsClient).Teardown(s.keepFilestoreData, logger)
 	if err != nil {
 		logger.WithError(err).Error("Failed to delete filestore")
 		return model.InstallationStateDeletionFinalCleanup

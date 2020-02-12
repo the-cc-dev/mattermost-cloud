@@ -14,14 +14,10 @@ import (
 // TagResource tags an AWS EC2 resource.
 func (a *Client) TagResource(resourceID, key, value string, logger log.FieldLogger) error {
 	if resourceID == "" {
-		return errors.New("Missing resource ID")
+		return errors.New("unable to tag resource: missing resource ID")
 	}
 
-	svc := ec2.New(session.New(), &aws.Config{
-		Region: aws.String(DefaultAWSRegion),
-	})
-
-	input := &ec2.CreateTagsInput{
+	resp, err := a.EC2.CreateTags(&ec2.CreateTagsInput{
 		Resources: []*string{
 			aws.String(resourceID),
 		},
@@ -31,9 +27,7 @@ func (a *Client) TagResource(resourceID, key, value string, logger log.FieldLogg
 				Value: aws.String(value),
 			},
 		},
-	}
-
-	resp, err := a.api.tagResource(svc, input)
+	})
 	if err != nil {
 		return err
 	}
@@ -49,15 +43,10 @@ func (a *Client) TagResource(resourceID, key, value string, logger log.FieldLogg
 // UntagResource deletes tags from an AWS EC2 resource.
 func (a *Client) UntagResource(resourceID, key, value string, logger log.FieldLogger) error {
 	if resourceID == "" {
-		return errors.New("Missing resource ID")
+		return errors.New("unable to remove tag from resource: missing resource ID")
 	}
 
-	svc, err := a.api.getEC2Client()
-	if err != nil {
-		return err
-	}
-
-	input := &ec2.DeleteTagsInput{
+	resp, err := a.EC2.DeleteTags(&ec2.DeleteTagsInput{
 		Resources: []*string{
 			aws.String(resourceID),
 		},
@@ -67,9 +56,7 @@ func (a *Client) UntagResource(resourceID, key, value string, logger log.FieldLo
 				Value: aws.String(value),
 			},
 		},
-	}
-
-	resp, err := a.api.untagResource(svc, input)
+	})
 	if err != nil {
 		return err
 	}
@@ -106,18 +93,6 @@ func (api *apiInterface) getEC2Client() (*ec2.EC2, error) {
 	})
 
 	return svc, nil
-}
-
-func (api *apiInterface) tagResource(svc *ec2.EC2, input *ec2.CreateTagsInput) (*ec2.CreateTagsOutput, error) {
-	return svc.CreateTags(input)
-}
-
-func (api *apiInterface) untagResource(svc *ec2.EC2, input *ec2.DeleteTagsInput) (*ec2.DeleteTagsOutput, error) {
-	return svc.DeleteTags(input)
-}
-
-func (api *apiInterface) describeImages(svc *ec2.EC2, input *ec2.DescribeImagesInput) (*ec2.DescribeImagesOutput, error) {
-	return svc.DescribeImages(input)
 }
 
 // GetVpcsWithFilters returns VPCs matching a given filter.
@@ -174,20 +149,15 @@ func (a *Client) IsValidAMI(AMIImage string) (bool, error) {
 	if AMIImage == "" {
 		return true, nil
 	}
-	svc := ec2.New(session.New(), &aws.Config{
-		Region: aws.String(DefaultAWSRegion),
-	})
 
-	describeImageInput := &ec2.DescribeImagesInput{
+	out, err := a.EC2.DescribeImages(&ec2.DescribeImagesInput{
 		Filters: []*ec2.Filter{
 			{
 				Name:   aws.String("image-id"),
 				Values: []*string{aws.String(AMIImage)},
 			},
 		},
-	}
-
-	out, err := a.api.describeImages(svc, describeImageInput)
+	})
 	if err != nil {
 		return false, err
 	}
