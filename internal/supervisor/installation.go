@@ -326,7 +326,22 @@ func (s *InstallationSupervisor) createClusterInstallation(cluster *model.Cluste
 }
 
 func (s *InstallationSupervisor) preProvisionInstallation(installation *model.Installation, instanceID string, logger log.FieldLogger) string {
-	err := utils.GetDatabase(installation, s.awsClient).Provision(s.store, logger)
+	clusterInstallations, err := s.store.GetClusterInstallations(&model.ClusterInstallationFilter{
+		PerPage:        model.AllPerPage,
+		InstallationID: installation.ID,
+	})
+	if err != nil {
+		logger.WithError(err).Error("Failed to provision installation database")
+		return model.InstallationStateCreationPreProvisioning
+	}
+
+	clusterInstallationCount := len(clusterInstallations)
+	if clusterInstallationCount != 1 {
+		logger.Errorf("Failed to provision installation database - installation should have exactly one cluster installation, but it found %v", clusterInstallationCount)
+		return model.InstallationStateCreationPreProvisioning
+	}
+
+	err = utils.GetDatabase(s.awsClient, installation, clusterInstallations[0]).Provision(logger)
 	if err != nil {
 		logger.WithError(err).Error("Failed to provision installation database")
 		return model.InstallationStateCreationPreProvisioning
@@ -648,7 +663,7 @@ func (s *InstallationSupervisor) finalDeletionCleanup(installation *model.Instal
 		return model.InstallationStateDeletionFinalCleanup
 	}
 
-	err = utils.GetDatabase(installation, s.awsClient).Teardown(s.keepDatabaseData, logger)
+	err = utils.GetDatabase(s.awsClient, installation, nil).Teardown(s.keepDatabaseData, logger)
 	if err != nil {
 		logger.WithError(err).Error("Failed to delete database")
 		return model.InstallationStateDeletionFinalCleanup

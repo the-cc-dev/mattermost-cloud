@@ -23,15 +23,14 @@ type RDSDatabaseMigration struct {
 }
 
 // NewRDSDatabaseMigration returns a new RDSDatabase interface.
-func NewRDSDatabaseMigration(masterInstallationID, replicaClusterID string, awsClient *Client) *RDSDatabaseMigration {
-	database := RDSDatabaseMigration{
+func NewRDSDatabaseMigration(installation *model.Installation, clusterInstallation *model.ClusterInstallation, awsClient *Client) *RDSDatabaseMigration {
+	return &RDSDatabaseMigration{
 		awsClient:          awsClient,
-		replicaClusterID:   aws.String(replicaClusterID),
-		replicaDBClusterID: aws.String(fmt.Sprintf("%s-migrated", CloudID(masterInstallationID))),
-		masterDBClusterID:  aws.String(CloudID(masterInstallationID)),
-		masterInstanceName: aws.String(fmt.Sprintf("%s-migrated-master", CloudID(masterInstallationID))),
+		replicaClusterID:   aws.String(clusterInstallation.ClusterID),
+		replicaDBClusterID: aws.String(fmt.Sprintf("%s-migrated", CloudID(installation.ID))),
+		masterDBClusterID:  aws.String(CloudID(installation.ID)),
+		masterInstanceName: aws.String(fmt.Sprintf("%s-migrated-master", CloudID(installation.ID))),
 	}
-	return &database
 }
 
 // Restore restores database from the most recent snapshot. Optianally, it takes a cluster ID if the

@@ -87,22 +87,23 @@ func GetFilestore(i *model.Installation, awsClient *aws.Client) model.Filestore 
 }
 
 // GetDatabase returns the Database interface that matches the installation.
-func GetDatabase(installation *model.Installation, awsClient *aws.Client) model.Database {
+// Note that clusterInstallation param is only required for provisioning an RDS database.
+func GetDatabase(awsClient *aws.Client, installation *model.Installation, clusterInstallation *model.ClusterInstallation) model.Database {
 	switch installation.Database {
 	case model.InstallationDatabaseMysqlOperator:
 		return model.NewMysqlOperatorDatabase()
 	case model.InstallationDatabaseAwsRDS:
-		return aws.NewRDSDatabase(installation.ID, awsClient)
+		return aws.NewRDSDatabase(installation, clusterInstallation, awsClient)
 	}
 
 	return &model.NotSupportedDatabase{}
 }
 
 // GetDatabaseMigration returns the Database interface that matches the cluster installation migration.
-func GetDatabaseMigration(installation *model.Installation, clusterInstallation *model.ClusterInstallation, awsClient *aws.Client) model.DatabaseMigration {
+func GetDatabaseMigration(awsClient *aws.Client, installation *model.Installation, clusterInstallation *model.ClusterInstallation) model.DatabaseMigration {
 	switch installation.Database {
 	case model.InstallationDatabaseAwsRDS:
-		return aws.NewRDSDatabaseMigration(installation.ID, clusterInstallation.ClusterID, awsClient)
+		return aws.NewRDSDatabaseMigration(installation, clusterInstallation, awsClient)
 	}
 
 	return &model.NotSupportedDatabaseMigration{}

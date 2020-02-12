@@ -19,48 +19,37 @@ const connStringTemplate = "mysql://%s:%s@tcp(%s:3306)/mattermost?charset=utf8mb
 
 // RDSDatabase is a database backed by AWS RDS.
 type RDSDatabase struct {
-	installationID string
-	dbClusterID    string
-	dbInstanceID   string
-	dbSecretName   string
-	awsClient      *Client
+	dbClusterID  string
+	dbInstanceID string
+	dbSecretName string
+	clusterID    string
+	awsClient    *Client
 }
 
 // NewRDSDatabase returns a new RDSDatabase interface.
-func NewRDSDatabase(installationID string, awsClient *Client) *RDSDatabase {
-	return &RDSDatabase{
-		installationID: installationID,
-		dbClusterID:    CloudID(installationID),
-		dbInstanceID:   fmt.Sprintf("%s-master", CloudID(installationID)),
-		dbSecretName:   fmt.Sprintf("%s-rds", CloudID(installationID)),
-		awsClient:      awsClient,
+func NewRDSDatabase(installation *model.Installation, clusterInstallation *model.ClusterInstallation, awsClient *Client) *RDSDatabase {
+	database := RDSDatabase{
+		dbClusterID:  CloudID(installation.ID),
+		dbInstanceID: fmt.Sprintf("%s-master", CloudID(installation.ID)),
+		dbSecretName: fmt.Sprintf("%s-rds", CloudID(installation.ID)),
+		awsClient:    awsClient,
 	}
+	if clusterInstallation != nil {
+		database.clusterID = clusterInstallation.ClusterID
+	}
+	return &database
 }
 
 // Provision completes all the steps necessary to provision a RDS database.
-func (d *RDSDatabase) Provision(store model.InstallationDatabaseStoreInterface, logger log.FieldLogger) error {
-
-	clusterInstallations, err := store.GetClusterInstallations(&model.ClusterInstallationFilter{
-		PerPage:        model.AllPerPage,
-		InstallationID: d.installationID,
-	})
-	if err != nil {
-		return errors.Wrapf(err, "unable to lookup cluster installations for installation %s", d.installationID)
+func (d *RDSDatabase) Provision(logger log.FieldLogger) error {
+	if d.clusterID == "" {
+		return errors.New("unable to provisioning RDS database - cluster installation id not provided")
 	}
 
-	clusterInstallationCount := len(clusterInstallations)
-	if clusterInstallationCount == 0 {
-		return fmt.Errorf("no cluster installations found for %s", d.installationID)
-	}
-	if clusterInstallationCount != 1 {
-		return fmt.Errorf("RDS provisioning is not currently supported for multiple cluster installations (found %d)", clusterInstallationCount)
-	}
-
-	clusterID := clusterInstallations[0].ClusterID
 	vpcs, err := d.awsClient.GetVpcsWithFilters([]*ec2.Filter{
 		{
 			Name:   aws.String(VpcClusterIDTagKey),
-			Values: []*string{aws.String(clusterID)},
+			Values: []*string{aws.String(d.clusterID)},
 		},
 		{
 			Name:   aws.String(VpcAvailableTagKey),
@@ -68,18 +57,17 @@ func (d *RDSDatabase) Provision(store model.InstallationDatabaseStoreInterface, 
 		},
 	})
 	if err != nil {
-		return errors.Wrapf(err, "unable to find a VPC for installation %s", d.installationID)
+		return errors.Wrapf(err, "unable to find a VPC for cluster %s", d.clusterID)
 	}
 	if len(vpcs) != 1 {
-		return fmt.Errorf("expected 1 VPC for cluster %s, but got %d", clusterID, len(vpcs))
+		return fmt.Errorf("expected 1 VPC for cluster %s, but got %d", d.clusterID, len(vpcs))
 	}
-	vpcID := *vpcs[0].VpcId
 
 	rdsSecret, err := d.awsClient.secretsManagerEnsureRDSSecretCreated(d.dbClusterID, logger)
 	if err != nil {
 		return err
 	}
-	err = d.awsClient.rdsEnsureDBClusterCreated(d.dbClusterID, vpcID, rdsSecret.MasterUsername, rdsSecret.MasterPassword, logger)
+	err = d.awsClient.rdsEnsureDBClusterCreated(d.dbClusterID, *vpcs[0].VpcId, rdsSecret.MasterUsername, rdsSecret.MasterPassword, logger)
 	if err != nil {
 		return err
 	}
@@ -99,7 +87,7 @@ func (d *RDSDatabase) Snapshot(logger log.FieldLogger) error {
 		DBClusterSnapshotIdentifier: aws.String(fmt.Sprintf("%s-snapshot-%s", d.dbClusterID, model.NewID())),
 		Tags: []*rds.Tag{&rds.Tag{
 			Key:   aws.String(DefaultClusterInstallationSnapshotTagKey),
-			Value: aws.String(fmt.Sprintf(DefaultClusterInstallationSnapshotTagValueTemplate, CloudID(d.installationID))),
+			Value: aws.String(fmt.Sprintf(DefaultClusterInstallationSnapshotTagValueTemplate, d.dbClusterID)),
 		}},
 	})
 	if err != nil {

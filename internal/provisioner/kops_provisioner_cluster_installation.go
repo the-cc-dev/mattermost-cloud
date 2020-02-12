@@ -103,7 +103,7 @@ func (provisioner *KopsProvisioner) CreateClusterInstallation(cluster *model.Clu
 		logger.Debug("Cluster installation configured with a Mattermost license")
 	}
 
-	databaseSpec, databaseSecret, err := utils.GetDatabase(installation, provisioner.awsClient).GenerateDatabaseSpecAndSecret(logger)
+	databaseSpec, databaseSecret, err := utils.GetDatabase(provisioner.awsClient, installation, clusterInstallation).GenerateDatabaseSpecAndSecret(logger)
 	if err != nil {
 		return err
 	}

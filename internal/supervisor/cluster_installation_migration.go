@@ -190,7 +190,7 @@ func (s *ClusterInstallationMigrationSupervisor) createClusterInstallationSnapsh
 		return model.CIMigrationCreationFailed
 	}
 
-	err = utils.GetDatabase(installation, s.awsClient).Snapshot(logger)
+	err = utils.GetDatabase(s.awsClient, installation, clusterInstallation).Snapshot(logger)
 	if err != nil {
 		logger.Errorf("failed to create a snapshot of the database: %s", err.Error())
 		return model.CIMigrationCreationFailed
@@ -210,7 +210,7 @@ func (s *ClusterInstallationMigrationSupervisor) restoreDatabase(migration *mode
 		return model.CIMigrationCreationFailed
 	}
 
-	status, err := utils.GetDatabaseMigration(installation, clusterInstallation, s.awsClient).Restore(logger)
+	status, err := utils.GetDatabaseMigration(s.awsClient, installation, clusterInstallation).Restore(logger)
 	if err != nil {
 		logger.Errorf("failed to restore database: %s", err.Error())
 		return model.CIMigrationCreationFailed
@@ -237,7 +237,7 @@ func (s *ClusterInstallationMigrationSupervisor) waitForDatabase(migration *mode
 		return model.CIMigrationCreationFailed
 	}
 
-	databaseStatus, err := utils.GetDatabaseMigration(installation, clusterInstallation, s.awsClient).Status(logger)
+	databaseStatus, err := utils.GetDatabaseMigration(s.awsClient, installation, clusterInstallation).Status(logger)
 	if err != nil {
 		logger.Errorf("failed to restore database: %s", err.Error())
 		return model.CIMigrationCreationFailed
