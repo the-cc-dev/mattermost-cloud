@@ -32,8 +32,8 @@ func CreateSession(logger log.FieldLogger, config SessionConfig) (*session.Sessi
 	sess, err := session.NewSessionWithOptions(session.Options{
 		Config: aws.Config{
 			Region: config.region(),
-			// TODO(gsagula): we should supply a Retryer with a more robust strategy or delegate this kind of operations
-			// to a sidecar proxy in the future.
+			// TODO(gsagula): we should supply a Retryer since it is a more robust retry strategy. Ideally, we should delegate this
+			// kind of operations to a proxy that know how to do it well.
 			// https://github.com/aws/aws-sdk-go/blob/99cd35c8c7d369ba8c32c46ed306f6c88d24cfd7/aws/request/retryer.go#L20
 			MaxRetries: config.retries(),
 		},
@@ -43,7 +43,12 @@ func CreateSession(logger log.FieldLogger, config SessionConfig) (*session.Sessi
 	}
 
 	sess.Handlers.Send.PushFront(func(r *request.Request) {
-		logger.WithField("aws-request", r.ClientInfo.ServiceName).Debugf("%s %s %s", r.HTTPRequest.Method, r.HTTPRequest.URL.String(), r.Params)
+		// GET: route53.amazonaws.com/2013-04-01/tags/hostedzone/ZWI3O6O6N782C
+		// {
+		// 		ResourceId: "ZWI3O6O6N782C",
+		// 		ResourceType: "hostedzone"
+		// }
+		logger.Debugf("%s: %s%s\n%s", r.HTTPRequest.Method, r.HTTPRequest.URL.Host, r.HTTPRequest.URL.RawPath, r.Params)
 	})
 
 	return sess, nil

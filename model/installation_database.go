@@ -4,6 +4,8 @@ import (
 	mmv1alpha1 "github.com/mattermost/mattermost-operator/pkg/apis/mattermost/v1alpha1"
 	log "github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
+
+	"errors"
 )
 
 const (
@@ -74,4 +76,29 @@ func (i *Installation) InternalDatabase() bool {
 // IsSupportedDatabase returns true if the given database string is supported.
 func IsSupportedDatabase(database string) bool {
 	return database == InstallationDatabaseMysqlOperator || database == InstallationDatabaseAwsRDS
+}
+
+// NotSupportedDatabase is supplied when systems required a database type that does not
+// not support. All methods should return an error.
+type NotSupportedDatabase struct{}
+
+// Provision returns not supported database error.
+func (d *NotSupportedDatabase) Provision(store InstallationDatabaseStoreInterface, logger log.FieldLogger) error {
+	return errors.New("attempted to use an unsupported database type")
+}
+
+// Snapshot is not supported by the operator.
+func (d *NotSupportedDatabase) Snapshot(logger log.FieldLogger) error {
+	return errors.New("attempted to use an unsupported database type")
+}
+
+// GenerateDatabaseSpecAndSecret creates the k8s database spec and secret for
+// accessing the MySQL operator database.
+func (d *NotSupportedDatabase) GenerateDatabaseSpecAndSecret(logger log.FieldLogger) (*mmv1alpha1.Database, *corev1.Secret, error) {
+	return nil, nil, errors.New("attempted to use an unsupported database type")
+}
+
+// Teardown returns not supported database error.
+func (d *NotSupportedDatabase) Teardown(keepData bool, logger log.FieldLogger) error {
+	return errors.New("attempted to use an unsupported database type")
 }

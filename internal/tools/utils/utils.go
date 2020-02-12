@@ -83,23 +83,19 @@ func GetFilestore(i *model.Installation) model.Filestore {
 		return aws.NewS3Filestore(i.ID)
 	}
 
-	// Warning: we should never get here as it would mean that we didn't match
-	// our filestore type.
-	return model.NewMinioOperatorFilestore()
+	return &model.UnsupportedFilestore{}
 }
 
 // GetDatabase returns the Database interface that matches the installation.
-func GetDatabase(i *model.Installation) model.Database {
-	switch i.Database {
+func GetDatabase(installation *model.Installation, awsClient *aws.Client) model.Database {
+	switch installation.Database {
 	case model.InstallationDatabaseMysqlOperator:
 		return model.NewMysqlOperatorDatabase()
 	case model.InstallationDatabaseAwsRDS:
-		return aws.NewRDSDatabase(i.ID)
+		return aws.NewRDSDatabase(installation.ID, awsClient)
 	}
 
-	// Warning: we should never get here as it would mean that we didn't match
-	// our database type.
-	return model.NewMysqlOperatorDatabase()
+	return &model.NotSupportedDatabase{}
 }
 
 // GetDatabaseMigration returns the Database interface that matches the cluster installation migration.
@@ -108,5 +104,6 @@ func GetDatabaseMigration(installation *model.Installation, clusterInstallation 
 	case model.InstallationDatabaseAwsRDS:
 		return aws.NewRDSDatabaseMigration(installation.ID, clusterInstallation.ClusterID, awsClient)
 	}
+
 	return &model.NotSupportedDatabaseMigration{}
 }

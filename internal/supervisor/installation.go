@@ -38,7 +38,7 @@ type installationStore interface {
 
 // provisioner abstracts the provisioning operations required by the installation supervisor.
 type installationProvisioner interface {
-	CreateClusterInstallation(cluster *model.Cluster, installation *model.Installation, clusterInstallation *model.ClusterInstallation, awsClient aws.AWS) error
+	CreateClusterInstallation(cluster *model.Cluster, installation *model.Installation, clusterInstallation *model.ClusterInstallation) error
 	DeleteClusterInstallation(cluster *model.Cluster, installation *model.Installation, clusterInstallation *model.ClusterInstallation) error
 	UpdateClusterInstallation(cluster *model.Cluster, installation *model.Installation, clusterInstallation *model.ClusterInstallation) error
 	GetClusterInstallationResource(cluster *model.Cluster, installation *model.Installation, clusterInstallation *model.ClusterInstallation) (*mmv1alpha1.ClusterInstallation, error)
@@ -52,20 +52,20 @@ type installationProvisioner interface {
 type InstallationSupervisor struct {
 	store                    installationStore
 	provisioner              installationProvisioner
-	aws                      aws.AWS
 	instanceID               string
 	clusterResourceThreshold int
 	keepDatabaseData         bool
 	keepFilestoreData        bool
 	logger                   log.FieldLogger
+	awsClient                *aws.Client
 }
 
 // NewInstallationSupervisor creates a new InstallationSupervisor.
-func NewInstallationSupervisor(store installationStore, installationProvisioner installationProvisioner, aws aws.AWS, instanceID string, threshold int, keepDatabaseData, keepFilestoreData bool, logger log.FieldLogger) *InstallationSupervisor {
+func NewInstallationSupervisor(store installationStore, installationProvisioner installationProvisioner, awsClient *aws.Client, instanceID string, threshold int, keepDatabaseData, keepFilestoreData bool, logger log.FieldLogger) *InstallationSupervisor {
 	return &InstallationSupervisor{
 		store:                    store,
 		provisioner:              installationProvisioner,
-		aws:                      aws,
+		awsClient:                awsClient,
 		instanceID:               instanceID,
 		clusterResourceThreshold: threshold,
 		keepDatabaseData:         keepDatabaseData,
@@ -326,7 +326,7 @@ func (s *InstallationSupervisor) createClusterInstallation(cluster *model.Cluste
 }
 
 func (s *InstallationSupervisor) preProvisionInstallation(installation *model.Installation, instanceID string, logger log.FieldLogger) string {
-	err := utils.GetDatabase(installation).Provision(s.store, logger)
+	err := utils.GetDatabase(installation, s.awsClient).Provision(s.store, logger)
 	if err != nil {
 		logger.WithError(err).Error("Failed to provision installation database")
 		return model.InstallationStateCreationPreProvisioning
@@ -420,7 +420,7 @@ func (s *InstallationSupervisor) configureInstallationDNS(installation *model.In
 		endpoints = append(endpoints, cr.Status.Endpoint)
 	}
 
-	err = s.aws.CreatePublicCNAME(installation.DNS, endpoints, logger)
+	err = s.awsClient.CreatePublicCNAME(installation.DNS, endpoints, logger)
 	if err != nil {
 		logger.WithError(err).Error("Failed to create DNS CNAME record")
 		return model.InstallationStateCreationDNS
@@ -642,13 +642,13 @@ func (s *InstallationSupervisor) deleteInstallation(installation *model.Installa
 }
 
 func (s *InstallationSupervisor) finalDeletionCleanup(installation *model.Installation, logger log.FieldLogger) string {
-	err := s.aws.DeletePublicCNAME(installation.DNS, logger)
+	err := s.awsClient.DeletePublicCNAME(installation.DNS, logger)
 	if err != nil {
 		logger.WithError(err).Error("Failed to delete installation DNS")
 		return model.InstallationStateDeletionFinalCleanup
 	}
 
-	err = utils.GetDatabase(installation).Teardown(s.keepDatabaseData, logger)
+	err = utils.GetDatabase(installation, s.awsClient).Teardown(s.keepDatabaseData, logger)
 	if err != nil {
 		logger.WithError(err).Error("Failed to delete database")
 		return model.InstallationStateDeletionFinalCleanup

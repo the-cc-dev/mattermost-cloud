@@ -103,10 +103,35 @@ func (d *RDSDatabaseMigration) Restore(logger log.FieldLogger) (string, error) {
 
 	logger.Debugf("restoring RDS database from snapshot id %s", *snapshots[0].DBClusterSnapshotIdentifier)
 
+	dbClusterOutput, err := d.aws.RDS.DescribeDBClusters(&rds.DescribeDBClustersInput{
+		DBClusterIdentifier: d.replicaDBClusterID,
+	})
+	if err == nil && len(dbClusterOutput.DBClusters) > 0 {
+		logger.WithField("db-cluster-name", *d.replicaDBClusterID).Info("AWS RDS DB cluster already exist - checking status")
+		if *dbClusterOutput.DBClusters[0].Status != RDSStatusDeleting {
+			return "", errors.Errorf("unabled to restore RDS database: db cluster %s already exist", *dbClusterOutput.DBClusters[0].DBClusterIdentifier)
+		}
+		logger.WithField("db-cluster-name", *d.replicaDBClusterID).Info("AWS RDS DB cluster is being deleted - waiting until it is done")
+		return model.DatabaseMigrationReplicaCreationIP, nil
+	}
+
 	err = d.aws.rdsEnsureRestoreDBClusterFromSnapshot(*vpcs[0].VpcId, *d.replicaDBClusterID, *snapshots[0].DBClusterSnapshotIdentifier, logger)
 	if err != nil {
 		return "", errors.Wrap(err, "unabled to restore RDS database")
 	}
+
+	dbInstanceOutput, err := d.aws.RDS.DescribeDBInstances(&rds.DescribeDBInstancesInput{
+		DBInstanceIdentifier: d.masterInstanceName,
+	})
+	if err == nil && len(dbInstanceOutput.DBInstances) > 0 {
+		logger.WithField("db-cluster-name", *d.replicaDBClusterID).Info("AWS RDS DB cluster already exist - checking status")
+		if *dbInstanceOutput.DBInstances[0].DBInstanceStatus != RDSStatusDeleting {
+			return "", errors.Errorf("unabled to restore RDS database: db instance %s already exist", *dbInstanceOutput.DBInstances[0].DBInstanceIdentifier)
+		}
+		logger.WithField("db-instance-name", *d.masterInstanceName).Info("AWS RDS DB instance is being deleted - waiting until it is done")
+		return model.DatabaseMigrationReplicaCreationIP, nil
+	}
+
 	err = d.aws.rdsEnsureDBClusterInstanceCreated(*d.replicaDBClusterID, *d.masterInstanceName, logger)
 	if err != nil {
 		return "", errors.Wrap(err, "unabled to restore RDS database")
@@ -117,7 +142,7 @@ func (d *RDSDatabaseMigration) Restore(logger log.FieldLogger) (string, error) {
 	return model.DatabaseMigrationReplicaCreationComplete, nil
 }
 
-// Status returns the status of the database.
+// Status returns the status of the database endpoints.
 func (d *RDSDatabaseMigration) Status(logger log.FieldLogger) (string, error) {
 	dbClusterEndpointsOutput, err := d.aws.RDS.DescribeDBClusterEndpoints(&rds.DescribeDBClusterEndpointsInput{
 		DBClusterIdentifier: d.replicaDBClusterID,
@@ -136,8 +161,7 @@ func (d *RDSDatabaseMigration) Status(logger log.FieldLogger) (string, error) {
 		case RDSStatusModifying:
 			return "", errors.Errorf("unabled to check RDS database status: db cluster id %s is being modified", *d.replicaDBClusterID)
 		case RDSStatusDeleting:
-			// TODO(gsagula): we should return these status so we can re-use this
-			// for teardown operation.
+			// TODO(gsagula): we should return this status so we can re-use this for other operations operation such as tearing down.
 			return "", errors.Errorf("unabled to check RDS database status: db cluster endpoint %s is being deleted", *endpoint.Endpoint)
 		}
 	}
@@ -159,8 +183,7 @@ func (d *RDSDatabaseMigration) Status(logger log.FieldLogger) (string, error) {
 		case RDSStatusModifying:
 			return "", errors.Errorf("unabled to check RDS database status: db instance id %s is being modified", *d.masterInstanceName)
 		case RDSStatusDeleting:
-			// TODO(gsagula): we should return these status so we can re-use this
-			// for teardown operation.
+			// TODO(gsagula): we should return this status so we can re-use this for other operations operation such as tearing down.
 			return "", errors.Errorf("unabled to check RDS database status: db instance id %s is being deleted", *d.masterInstanceName)
 		}
 	}
@@ -170,8 +193,5 @@ func (d *RDSDatabaseMigration) Status(logger log.FieldLogger) (string, error) {
 
 // Teardown delete any resource created during migration.
 func (d *RDSDatabaseMigration) Teardown(logger log.FieldLogger) error {
-
-	// TODO(gsagula): implement it.
-
-	return nil
+	return errors.New("implementation pending")
 }

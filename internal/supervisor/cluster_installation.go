@@ -30,7 +30,7 @@ type clusterInstallationStore interface {
 
 // provisioner abstracts the provisioning operations required by the cluster installation supervisor.
 type clusterInstallationProvisioner interface {
-	CreateClusterInstallation(cluster *model.Cluster, installation *model.Installation, clusterInstallation *model.ClusterInstallation, awsClient aws.AWS) error
+	CreateClusterInstallation(cluster *model.Cluster, installation *model.Installation, clusterInstallation *model.ClusterInstallation) error
 	DeleteClusterInstallation(cluster *model.Cluster, installation *model.Installation, clusterInstallation *model.ClusterInstallation) error
 	UpdateClusterInstallation(cluster *model.Cluster, installation *model.Installation, clusterInstallation *model.ClusterInstallation) error
 	GetClusterInstallationResource(cluster *model.Cluster, installation *model.Installation, clusterInstallation *model.ClusterInstallation) (*mmv1alpha1.ClusterInstallation, error)
@@ -43,17 +43,17 @@ type clusterInstallationProvisioner interface {
 type ClusterInstallationSupervisor struct {
 	store       clusterInstallationStore
 	provisioner clusterInstallationProvisioner
-	aws         aws.AWS
+	awsClient   *aws.Client
 	instanceID  string
 	logger      log.FieldLogger
 }
 
 // NewClusterInstallationSupervisor creates a new ClusterInstallationSupervisor.
-func NewClusterInstallationSupervisor(store clusterInstallationStore, clusterInstallationProvisioner clusterInstallationProvisioner, aws aws.AWS, instanceID string, logger log.FieldLogger) *ClusterInstallationSupervisor {
+func NewClusterInstallationSupervisor(store clusterInstallationStore, clusterInstallationProvisioner clusterInstallationProvisioner, awsClient *aws.Client, instanceID string, logger log.FieldLogger) *ClusterInstallationSupervisor {
 	return &ClusterInstallationSupervisor{
 		store:       store,
 		provisioner: clusterInstallationProvisioner,
-		aws:         aws,
+		awsClient:   awsClient,
 		instanceID:  instanceID,
 		logger:      logger,
 	}
@@ -172,7 +172,7 @@ func (s *ClusterInstallationSupervisor) transitionClusterInstallation(clusterIns
 }
 
 func (s *ClusterInstallationSupervisor) createClusterInstallation(clusterInstallation *model.ClusterInstallation, logger log.FieldLogger, installation *model.Installation, cluster *model.Cluster) string {
-	err := s.provisioner.CreateClusterInstallation(cluster, installation, clusterInstallation, s.aws)
+	err := s.provisioner.CreateClusterInstallation(cluster, installation, clusterInstallation)
 	if err != nil {
 		logger.WithError(err).Error("Failed to provision cluster installation")
 		return model.ClusterInstallationStateCreationRequested

@@ -134,15 +134,6 @@ var serverCmd = &cobra.Command{
 		// best-effort attempt to tag the VPC with a human's identity for dev purposes
 		owner := getHumanReadableID()
 
-		// Setup the provisioner for actually effecting changes to clusters.
-		kopsProvisioner := provisioner.NewKopsProvisioner(
-			s3StateStore,
-			privateDNS,
-			owner,
-			useExistingResources,
-			logger,
-		)
-
 		sess, err := aws.CreateSession(logger, aws.SessionConfig{
 			// TODO(gsagula): aws session may just want to use whatever the environment provides in the future.
 			Region:  aws.DefaultAWSRegion,
@@ -152,6 +143,16 @@ var serverCmd = &cobra.Command{
 			logger.WithError(err).Error("unable to get create a AWS session")
 		}
 		awsClient := aws.NewClient(sess)
+
+		// Setup the provisioner for actually effecting changes to clusters.
+		kopsProvisioner := provisioner.NewKopsProvisioner(
+			s3StateStore,
+			privateDNS,
+			owner,
+			useExistingResources,
+			logger,
+			awsClient,
+		)
 
 		var multiDoer supervisor.MultiDoer
 		var clusterSupervisorInstance *supervisor.ClusterSupervisor
@@ -171,6 +172,7 @@ var serverCmd = &cobra.Command{
 			multiDoer = append(multiDoer, clusterInstallSupervisorInstance)
 		}
 		if clusterInstallationMigrationSupervisor {
+			// TODO(gsagula): it may not need all the supervisors in.
 			multiDoer = append(multiDoer, supervisor.NewClusterInstallationMigrationSupervisor(sqlStore, clusterSupervisorInstance, installationSupervisorInstance, clusterInstallSupervisorInstance, awsClient, instanceID, logger))
 		}
 

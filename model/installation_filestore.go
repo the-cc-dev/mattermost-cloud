@@ -1,6 +1,7 @@
 package model
 
 import (
+	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 
 	mmv1alpha1 "github.com/mattermost/mattermost-operator/pkg/apis/mattermost/v1alpha1"
@@ -61,4 +62,23 @@ func (i *Installation) InternalFilestore() bool {
 // IsSupportedFilestore returns true if the given filestore string is supported.
 func IsSupportedFilestore(filestore string) bool {
 	return filestore == InstallationFilestoreMinioOperator || filestore == InstallationFilestoreAwsS3
+}
+
+// UnsupportedFilestore supplies an implementation that produces an error when the system
+// invoke any of its methods.
+type UnsupportedFilestore struct{}
+
+// Provision should always return error.
+func (f *UnsupportedFilestore) Provision(logger log.FieldLogger) error {
+	return errors.New("attempted to use an unsupported file store")
+}
+
+// Teardown should always return error.
+func (f *UnsupportedFilestore) Teardown(keepData bool, logger log.FieldLogger) error {
+	return errors.New("attempted to use an unsupported file store")
+}
+
+// GenerateFilestoreSpecAndSecret should always return error.
+func (f *UnsupportedFilestore) GenerateFilestoreSpecAndSecret(logger log.FieldLogger) (*mmv1alpha1.Minio, *corev1.Secret, error) {
+	return nil, nil, errors.New("attempted to use an unsupported file store")
 }
