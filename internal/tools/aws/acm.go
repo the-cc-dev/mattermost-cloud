@@ -1,8 +1,6 @@
 package aws
 
 import (
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/acm"
 	"github.com/pkg/errors"
 )
@@ -46,23 +44,4 @@ func (a *Client) GetCertificateSummaryByTag(key, value string) (*acm.Certificate
 	}
 
 	return nil, errors.Errorf("no certificate was found under tag:%s:%s", *tag.Key, *tag.Value)
-}
-
-func (api *apiInterface) getACMClient() (*acm.ACM, error) {
-	sess, err := session.NewSession()
-	if err != nil {
-		return nil, err
-	}
-
-	return acm.New(sess, &aws.Config{
-		Region: aws.String(DefaultAWSRegion),
-	}), nil
-}
-
-func (api *apiInterface) listCertificates(svc *acm.ACM, input *acm.ListCertificatesInput) (*acm.ListCertificatesOutput, error) {
-	return svc.ListCertificates(input)
-}
-
-func (api *apiInterface) listTagsForCertificate(svc *acm.ACM, input *acm.ListTagsForCertificateInput) (*acm.ListTagsForCertificateOutput, error) {
-	return svc.ListTagsForCertificate(input)
 }

@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/ec2"
 	log "github.com/sirupsen/logrus"
 )
@@ -87,21 +86,9 @@ func prettyDeleteTagsResponse(resp *ec2.DeleteTagsOutput) string {
 	return string(prettyResp)
 }
 
-func (api *apiInterface) getEC2Client() (*ec2.EC2, error) {
-	svc := ec2.New(session.New(), &aws.Config{
-		Region: aws.String(DefaultAWSRegion),
-	})
-
-	return svc, nil
-}
-
 // GetVpcsWithFilters returns VPCs matching a given filter.
-func GetVpcsWithFilters(filters []*ec2.Filter) ([]*ec2.Vpc, error) {
-	svc := ec2.New(session.New(), &aws.Config{
-		Region: aws.String(DefaultAWSRegion),
-	})
-
-	vpcOutput, err := svc.DescribeVpcs(&ec2.DescribeVpcsInput{
+func (a *Client) GetVpcsWithFilters(filters []*ec2.Filter) ([]*ec2.Vpc, error) {
+	vpcOutput, err := a.EC2.DescribeVpcs(&ec2.DescribeVpcsInput{
 		Filters: filters,
 	})
 	if err != nil {
@@ -112,12 +99,8 @@ func GetVpcsWithFilters(filters []*ec2.Filter) ([]*ec2.Vpc, error) {
 }
 
 // GetSubnetsWithFilters returns subnets matching a given filter.
-func GetSubnetsWithFilters(filters []*ec2.Filter) ([]*ec2.Subnet, error) {
-	svc := ec2.New(session.New(), &aws.Config{
-		Region: aws.String(DefaultAWSRegion),
-	})
-
-	subnetOutput, err := svc.DescribeSubnets(&ec2.DescribeSubnetsInput{
+func (a *Client) GetSubnetsWithFilters(filters []*ec2.Filter) ([]*ec2.Subnet, error) {
+	subnetOutput, err := a.EC2.DescribeSubnets(&ec2.DescribeSubnetsInput{
 		Filters: filters,
 	})
 	if err != nil {
@@ -128,12 +111,8 @@ func GetSubnetsWithFilters(filters []*ec2.Filter) ([]*ec2.Subnet, error) {
 }
 
 // GetSecurityGroupsWithFilters returns SGs matching a given filter.
-func GetSecurityGroupsWithFilters(filters []*ec2.Filter) ([]*ec2.SecurityGroup, error) {
-	svc := ec2.New(session.New(), &aws.Config{
-		Region: aws.String(DefaultAWSRegion),
-	})
-
-	sgOutput, err := svc.DescribeSecurityGroups(&ec2.DescribeSecurityGroupsInput{
+func (a *Client) GetSecurityGroupsWithFilters(filters []*ec2.Filter) ([]*ec2.SecurityGroup, error) {
+	sgOutput, err := a.EC2.DescribeSecurityGroups(&ec2.DescribeSecurityGroupsInput{
 		Filters: filters,
 	})
 	if err != nil {

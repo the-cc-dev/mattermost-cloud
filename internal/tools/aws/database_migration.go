@@ -15,7 +15,7 @@ import (
 
 // RDSDatabaseMigration is a migrated database backed by AWS RDS.
 type RDSDatabaseMigration struct {
-	aws                *Client
+	awsClient          *Client
 	masterDBClusterID  *string
 	masterInstanceName *string
 	replicaClusterID   *string
@@ -25,7 +25,7 @@ type RDSDatabaseMigration struct {
 // NewRDSDatabaseMigration returns a new RDSDatabase interface.
 func NewRDSDatabaseMigration(masterInstallationID, replicaClusterID string, awsClient *Client) *RDSDatabaseMigration {
 	database := RDSDatabaseMigration{
-		aws:                awsClient,
+		awsClient:          awsClient,
 		replicaClusterID:   aws.String(replicaClusterID),
 		replicaDBClusterID: aws.String(fmt.Sprintf("%s-migrated", CloudID(masterInstallationID))),
 		masterDBClusterID:  aws.String(CloudID(masterInstallationID)),
@@ -37,7 +37,7 @@ func NewRDSDatabaseMigration(masterInstallationID, replicaClusterID string, awsC
 // Restore restores database from the most recent snapshot. Optianally, it takes a cluster ID if the
 // the intent is to restore the database in another cluster.
 func (d *RDSDatabaseMigration) Restore(logger log.FieldLogger) (string, error) {
-	vpcs, err := GetVpcsWithFilters([]*ec2.Filter{
+	vpcs, err := d.awsClient.GetVpcsWithFilters([]*ec2.Filter{
 		{
 			Name:   aws.String(VpcClusterIDTagKey),
 			Values: []*string{d.replicaClusterID},
@@ -54,7 +54,7 @@ func (d *RDSDatabaseMigration) Restore(logger log.FieldLogger) (string, error) {
 		return "", errors.Errorf("unabled to restore RDS database: expected 1 VPC in cluster id %s, but got %d", *d.replicaDBClusterID, len(vpcs))
 	}
 
-	dbClusterSnapshotsOut, err := d.aws.RDS.DescribeDBClusterSnapshots(&rds.DescribeDBClusterSnapshotsInput{
+	dbClusterSnapshotsOut, err := d.awsClient.RDS.DescribeDBClusterSnapshots(&rds.DescribeDBClusterSnapshotsInput{
 		SnapshotType: aws.String(RDSDefaultSnapshotType),
 	})
 	if err != nil {
@@ -65,7 +65,7 @@ func (d *RDSDatabaseMigration) Restore(logger log.FieldLogger) (string, error) {
 
 	var snapshots []*rds.DBClusterSnapshot
 	for _, snapshot := range dbClusterSnapshotsOut.DBClusterSnapshots {
-		tags, err := d.aws.RDS.ListTagsForResource(&rds.ListTagsForResourceInput{
+		tags, err := d.awsClient.RDS.ListTagsForResource(&rds.ListTagsForResourceInput{
 			ResourceName: snapshot.DBClusterSnapshotArn,
 		})
 		if err != nil {
@@ -103,7 +103,7 @@ func (d *RDSDatabaseMigration) Restore(logger log.FieldLogger) (string, error) {
 
 	logger.Debugf("restoring RDS database from snapshot id %s", *snapshots[0].DBClusterSnapshotIdentifier)
 
-	dbClusterOutput, err := d.aws.RDS.DescribeDBClusters(&rds.DescribeDBClustersInput{
+	dbClusterOutput, err := d.awsClient.RDS.DescribeDBClusters(&rds.DescribeDBClustersInput{
 		DBClusterIdentifier: d.replicaDBClusterID,
 	})
 	if err == nil && len(dbClusterOutput.DBClusters) > 0 {
@@ -115,12 +115,12 @@ func (d *RDSDatabaseMigration) Restore(logger log.FieldLogger) (string, error) {
 		return model.DatabaseMigrationReplicaCreationIP, nil
 	}
 
-	err = d.aws.rdsEnsureRestoreDBClusterFromSnapshot(*vpcs[0].VpcId, *d.replicaDBClusterID, *snapshots[0].DBClusterSnapshotIdentifier, logger)
+	err = d.awsClient.rdsEnsureRestoreDBClusterFromSnapshot(*vpcs[0].VpcId, *d.replicaDBClusterID, *snapshots[0].DBClusterSnapshotIdentifier, logger)
 	if err != nil {
 		return "", errors.Wrap(err, "unabled to restore RDS database")
 	}
 
-	dbInstanceOutput, err := d.aws.RDS.DescribeDBInstances(&rds.DescribeDBInstancesInput{
+	dbInstanceOutput, err := d.awsClient.RDS.DescribeDBInstances(&rds.DescribeDBInstancesInput{
 		DBInstanceIdentifier: d.masterInstanceName,
 	})
 	if err == nil && len(dbInstanceOutput.DBInstances) > 0 {
@@ -132,7 +132,7 @@ func (d *RDSDatabaseMigration) Restore(logger log.FieldLogger) (string, error) {
 		return model.DatabaseMigrationReplicaCreationIP, nil
 	}
 
-	err = d.aws.rdsEnsureDBClusterInstanceCreated(*d.replicaDBClusterID, *d.masterInstanceName, logger)
+	err = d.awsClient.rdsEnsureDBClusterInstanceCreated(*d.replicaDBClusterID, *d.masterInstanceName, logger)
 	if err != nil {
 		return "", errors.Wrap(err, "unabled to restore RDS database")
 	}
@@ -144,7 +144,7 @@ func (d *RDSDatabaseMigration) Restore(logger log.FieldLogger) (string, error) {
 
 // Status returns the status of the database endpoints.
 func (d *RDSDatabaseMigration) Status(logger log.FieldLogger) (string, error) {
-	dbClusterEndpointsOutput, err := d.aws.RDS.DescribeDBClusterEndpoints(&rds.DescribeDBClusterEndpointsInput{
+	dbClusterEndpointsOutput, err := d.awsClient.RDS.DescribeDBClusterEndpoints(&rds.DescribeDBClusterEndpointsInput{
 		DBClusterIdentifier: d.replicaDBClusterID,
 	})
 	if err != nil {
@@ -166,7 +166,7 @@ func (d *RDSDatabaseMigration) Status(logger log.FieldLogger) (string, error) {
 		}
 	}
 
-	dbInstancesOutput, err := d.aws.RDS.DescribeDBInstances(&rds.DescribeDBInstancesInput{
+	dbInstancesOutput, err := d.awsClient.RDS.DescribeDBInstances(&rds.DescribeDBInstancesInput{
 		DBInstanceIdentifier: d.masterInstanceName,
 	})
 	if err != nil {

@@ -6,7 +6,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/mattermost/mattermost-cloud/internal/tools/aws/mocks"
+	aws "github.com/mattermost/mattermost-cloud/internal/tools/aws/mocks"
 )
 
 // ClientTestSuite supplies tests for aws package Client.
@@ -31,19 +31,19 @@ func (d *ClientTestSuite) TestNewClient() {
 }
 
 func TestClientSuite(t *testing.T) {
-	suite.Run(t, new(DatabaseMigrationTestSuite))
+	suite.Run(t, new(ClientTestSuite))
 }
 
 // MockedClient supplies a AWS mocks and mocked AWS client.
 type MockedClient struct {
-	api    *mocks.Mocks
+	api    *aws.Mocks
 	client *Client
 }
 
 // NewMockedClient returns a instance of a mocked AWS client.
 func NewMockedClient() *MockedClient {
 	mockedClient := &MockedClient{
-		api: mocks.NewMocks(),
+		api: aws.NewMocks(),
 	}
 	mockedClient.client = &Client{
 		RDS:     mockedClient.api.RDS,

@@ -57,7 +57,7 @@ func (d *RDSDatabase) Provision(store model.InstallationDatabaseStoreInterface, 
 	}
 
 	clusterID := clusterInstallations[0].ClusterID
-	vpcs, err := GetVpcsWithFilters([]*ec2.Filter{
+	vpcs, err := d.awsClient.GetVpcsWithFilters([]*ec2.Filter{
 		{
 			Name:   aws.String(VpcClusterIDTagKey),
 			Values: []*string{aws.String(clusterID)},

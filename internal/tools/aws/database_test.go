@@ -4,9 +4,55 @@ import (
 	"os"
 	"testing"
 
+	"github.com/mattermost/mattermost-cloud/internal/testlib"
+	modelmocks "github.com/mattermost/mattermost-cloud/model/mocks"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
+
+type DatabaseTestSuite struct {
+	suite.Suite
+	RDSTestSuite   *RDSTestSuite
+	RDSDatabase    *RDSDatabase
+	MockedStore    *modelmocks.InstallationDatabaseStoreInterface
+	InstallationID string
+}
+
+func (d *DatabaseTestSuite) SetupTest() {
+	d.RDSTestSuite.MockedClient = NewMockedClient()
+	d.RDSTestSuite.MockedFilledLogger = testlib.NewMockedFieldLogger()
+	d.MockedStore = &modelmocks.InstallationDatabaseStoreInterface{}
+	d.RDSDatabase = NewRDSDatabase(d.InstallationID, d.RDSTestSuite.MockedClient.client)
+}
+
+func (d *DatabaseTestSuite) TestRestoreErrorVPCNotAvailable() {
+	err := d.RDSDatabase.Provision(d.MockedStore, d.RDSTestSuite.MockedFilledLogger.Logger)
+	d.MockedStore.AssertCalled(d.T(), "GetClusterInstallations")
+	d.Assert().Error(err)
+
+	d.Assert().Contains(err.Error(), "unable to lookup cluster installations for installation 953qdo7ce7ndjbz3gemrdfff4h:")
+	d.Assert().Contains(err.Error(), "failed to query for clusterInstallations: no such table: ClusterInstallation")
+}
+
+func TestDatabaseSuite(t *testing.T) {
+	suite.Run(t, &DatabaseTestSuite{
+		InstallationID: "953qdo7ce7ndjbz3gemrdfff4h",
+		RDSTestSuite: &RDSTestSuite{
+			VPCID:               "vpc-0c889fcf75ed9cfbb",
+			DBClusterID:         "cloud-953qdo7ce7ndjbz3gemrdfff4h",
+			DBClusterInstance:   "cloud-953qdo7ce7ndjbz3gemrdfff4h-master",
+			DBUser:              "admin",
+			DBPassword:          "secret",
+			GroupID:             "id-0c889fcf75ed9cfbb",
+			DBSubnetGroupName:   "mattermost-provisioner-db-vpc-0c889fcf75ed9cfbb",
+			DBPgCluster:         "mattermost-provisioner-rds-cluster-pg",
+			DBPg:                "mattermost-provisioner-rds-pg",
+			DBName:              "mattermost",
+			DBAvailabilityZones: []string{"us-east-1a", "us-east-1b", "us-east-1c"},
+		},
+	})
+}
 
 // WARNING:
 // This test is meant to exercise the provisioning and teardown of an AWS RDS
