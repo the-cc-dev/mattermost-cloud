@@ -1,7 +1,7 @@
 package mocks
 
-// Mocks supplies helper functions for AWS mocked client.
-type Mocks struct {
+// AWSMockedServices supplies a AWS mocked services api.
+type AWSMockedServices struct {
 	RDS            *RDSAPI
 	ACM            *ACMAPI
 	EC2            *EC2API
@@ -11,9 +11,9 @@ type Mocks struct {
 	SecretsManager *SecretsManagerAPI
 }
 
-// NewMocks returns a new mocked AWS client.
-func NewMocks() *Mocks {
-	return &Mocks{
+// NewAWSMockedServices returns a new instance of AWSMockedServices.
+func NewAWSMockedServices() *AWSMockedServices {
+	return &AWSMockedServices{
 		RDS:            new(RDSAPI),
 		EC2:            new(EC2API),
 		ACM:            new(ACMAPI),
