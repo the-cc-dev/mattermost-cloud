@@ -21,56 +21,23 @@ func (d *ClientTestSuite) SetupTest() {
 	d.session = session.Must(session.NewSession())
 }
 
-func (d *ClientTestSuite) TestNewClient() {
-	client := NewClient(d.session)
-
-	d.Assert().NotNil(client)
-	d.Assert().NotNil(client.RDS)
-	d.Assert().NotNil(client.S3)
-	d.Assert().NotNil(client.IAM)
-	d.Assert().NotNil(client.ACM)
-	d.Assert().NotNil(client.SecretsManager)
-	d.Assert().NotNil(client.Route53)
-}
-
 func TestClientSuite(t *testing.T) {
 	suite.Run(t, new(ClientTestSuite))
-}
-
-// MockedClient supplies a AWS mocks and mocked AWS client.
-type MockedClient struct {
-	api    *mocks.AWSMockedServices
-	client *Client
-}
-
-// NewMockedClient returns a instance of a mocked AWS client.
-func NewMockedClient() *MockedClient {
-	mockedClient := &MockedClient{
-		api: mocks.NewAWSMockedServices(),
-	}
-	mockedClient.client = &Client{
-		RDS:            mockedClient.api.RDS,
-		EC2:            mockedClient.api.EC2,
-		IAM:            mockedClient.api.IAM,
-		ACM:            mockedClient.api.ACM,
-		S3:             mockedClient.api.S3,
-		Route53:        mockedClient.api.Route53,
-		SecretsManager: mockedClient.api.SecretsManager,
-	}
-
-	return mockedClient
 }
 
 // Holds mocks, clients and fixtures for testing any AWS service. Any new fixtures
 // should be added here.
 type AWSTestSuite struct {
 	suite.Suite
+
+	// Mocked client and services.
 	Mocks struct {
 		AWS *Client
 		API *mocks.AWSMockedServices
 		LOG *testlib.MockedFieldLogger
 	}
 
+	// General AWS fixtures.
 	InstallationA *model.Installation
 	InstallationB *model.Installation
 
@@ -83,14 +50,11 @@ type AWSTestSuite struct {
 	VPCa string
 	VPCb string
 
-	// Database Test
-	RDSSecretID  string
-	SecretString string
-
-	Installation        *model.Installation
-	ClusterInstallation *model.ClusterInstallation
-
-	// RDS Test
+	// RDS database fixtures.
+	RDSSecretID          string
+	SecretString         string
+	SecretStringUserErr  string
+	SecretStringPassErr  string
 	DBUser               string
 	DBPassword           string
 	GroupID              string
@@ -153,5 +117,27 @@ func NewAWSTestSuite() *AWSTestSuite {
 		RDSParamGroup:        "mattermost-provisioner-rds-pg",
 		RDSAvailabilityZones: []string{"us-east-1a", "us-east-1b", "us-east-1c"},
 		GroupID:              "id-0000000000000000",
+		SecretString:         "{\"MasterUsername\":\"mmcloud\",\"MasterPassword\":\"oX5rWueZt6ynsijE9PHpUO0VUWSwWSxqXCaZw1dC\"}",
+		SecretStringUserErr:  "{\"username\":\"mmcloud\",\"MasterPassword\":\"oX5rWueZt6ynsijE9PHpUO0VUWSwWSxqXCaZw1dC\"}",
+		SecretStringPassErr:  "{\"MasterUsername\":\"mmcloud\",\"password\":\"oX5rWueZt6ynsijE9PHpUO0VUWSwWSxqXCaZw1dC\"}",
 	}
+}
+
+func (a *AWSTestSuite) TestNewClient() {
+	session, err := session.NewSession()
+	a.Assert().NoError(err)
+
+	client := NewClient(session)
+
+	a.Assert().NotNil(client)
+	a.Assert().NotNil(client.ACM)
+	a.Assert().NotNil(client.IAM)
+	a.Assert().NotNil(client.RDS)
+	a.Assert().NotNil(client.S3)
+	a.Assert().NotNil(client.Route53)
+	a.Assert().NotNil(client.SecretsManager)
+}
+
+func TestAWSSuite(t *testing.T) {
+	suite.Run(t, NewAWSTestSuite())
 }

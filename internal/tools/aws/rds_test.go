@@ -2,20 +2,19 @@ package aws
 
 import (
 	"fmt"
-	"testing"
 
+	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/ec2"
 	"github.com/aws/aws-sdk-go/service/rds"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/mock"
-	"github.com/stretchr/testify/suite"
 )
 
 func (a *AWSTestSuite) TestRDSEnsureDBClusterCreated() {
 	a.SetDescribeDBClustersNotFoundExpectation().Once()
 	a.SetDescribeSecurityGroupsExpectation().Once()
-	a.SetDescribeDBSubnetGroupsExpectation(SubnetGroupName(a.VPCa)).Once()
-	a.SetCreateDBClusterExpectation(CloudID(a.InstallationA.ID)).Return(nil, nil).Once()
+	a.SetDescribeDBSubnetGroupsExpectation(a.VPCa).Once()
+	a.SetCreateDBClusterExpectation(a.InstallationA.ID).Return(nil, nil).Once()
 	a.Mocks.LOG.WithFieldArgs("security-group-ids", a.GroupID).Once()
 	a.Mocks.LOG.WithFieldString("db-subnet-group-name", SubnetGroupName(a.VPCa)).Once()
 	a.Mocks.LOG.WithFieldString("db-cluster-name", CloudID(a.InstallationA.ID)).Once()
@@ -67,8 +66,8 @@ func (a *AWSTestSuite) TestRDSEnsureDBClusterCreatedSubnetError() {
 func (a *AWSTestSuite) TestRDSEnsureDBClusterCreatedError() {
 	a.SetDescribeDBClustersNotFoundExpectation().Once()
 	a.SetDescribeSecurityGroupsExpectation().Once()
-	a.SetDescribeDBSubnetGroupsExpectation(SubnetGroupName(a.VPCa)).Once()
-	a.SetCreateDBClusterExpectation(CloudID(a.InstallationA.ID)).Return(nil, nil).Once().Return(nil, errors.New("cannot find parameter groups")).Once()
+	a.SetDescribeDBSubnetGroupsExpectation(a.VPCa).Once()
+	a.SetCreateDBClusterExpectation(a.InstallationA.ID).Return(nil, nil).Once().Return(nil, errors.New("cannot find parameter groups")).Once()
 	a.Mocks.LOG.WithFieldArgs("security-group-ids", a.GroupID).Once()
 	a.Mocks.LOG.WithFieldString("db-subnet-group-name", SubnetGroupName(a.VPCa)).Once()
 
@@ -114,10 +113,6 @@ func (a *AWSTestSuite) TestRDSEnsureDBClusterInstanceCreateError() {
 	a.Assert().Error(err)
 	a.Assert().Equal(err.Error(), "bad request")
 	a.Mocks.API.RDS.AssertNotCalled(a.T(), "CreateDBInstance")
-}
-
-func TestRDSSuite(t *testing.T) {
-	suite.Run(t, NewAWSTestSuite())
 }
 
 // Helpers
@@ -168,11 +163,11 @@ func (a *AWSTestSuite) SetDescribeSecurityGroupsErrorExpectation() *mock.Call {
 	return a.Mocks.API.EC2.On("DescribeSecurityGroups", mock.AnythingOfType("*ec2.DescribeSecurityGroupsInput")).Return(nil, errors.New("bad request"))
 }
 
-func (a *AWSTestSuite) SetDescribeDBSubnetGroupsExpectation(subnetGroupName string) *mock.Call {
+func (a *AWSTestSuite) SetDescribeDBSubnetGroupsExpectation(vpcID string) *mock.Call {
 	return a.Mocks.API.RDS.On("DescribeDBSubnetGroups", mock.AnythingOfType("*rds.DescribeDBSubnetGroupsInput")).Return(&rds.DescribeDBSubnetGroupsOutput{
 		DBSubnetGroups: []*rds.DBSubnetGroup{
 			&rds.DBSubnetGroup{
-				DBSubnetGroupName: &subnetGroupName,
+				DBSubnetGroupName: aws.String(SubnetGroupName(vpcID)),
 			},
 		},
 	}, nil)
@@ -182,7 +177,7 @@ func (a *AWSTestSuite) SetDescribeDBSubnetGroupsErrorExpectation() *mock.Call {
 	return a.Mocks.API.RDS.On("DescribeDBSubnetGroups", mock.AnythingOfType("*rds.DescribeDBSubnetGroupsInput")).Return(nil, errors.New("bad request"))
 }
 
-func (a *AWSTestSuite) SetCreateDBClusterExpectation(dbClusterID string) *mock.Call {
+func (a *AWSTestSuite) SetCreateDBClusterExpectation(installationID string) *mock.Call {
 	return a.Mocks.API.RDS.On("CreateDBCluster", mock.MatchedBy(func(input *rds.CreateDBClusterInput) bool {
 		for _, zone := range input.AvailabilityZones {
 			if !a.Assert().Contains(a.RDSAvailabilityZones, *zone) {
@@ -190,7 +185,7 @@ func (a *AWSTestSuite) SetCreateDBClusterExpectation(dbClusterID string) *mock.C
 			}
 		}
 		return *input.BackupRetentionPeriod == 7 &&
-			*input.DBClusterIdentifier == dbClusterID &&
+			*input.DBClusterIdentifier == CloudID(installationID) &&
 			*input.DBClusterParameterGroupName == a.RDSParamGroupCluster &&
 			*input.DatabaseName == a.DBName &&
 			*input.VpcSecurityGroupIds[0] == a.GroupID

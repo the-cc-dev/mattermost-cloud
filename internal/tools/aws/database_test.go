@@ -1,186 +1,113 @@
 package aws
 
-const RDSSecretString = "{\"MasterUsername\":\"mmcloud\",\"MasterPassword\":\"oX5rWueZt6ynsijE9PHpUO0VUWSwWSxqXCaZw1dC\"}"
+import (
+	"github.com/aws/aws-sdk-go/service/ec2"
+	"github.com/aws/aws-sdk-go/service/secretsmanager"
+	"github.com/stretchr/testify/mock"
+)
 
-// type DatabaseTestSuite struct {
-// 	suite.Suite
-// 	RDSSecretID         string
-// 	SecretString        string
-// 	DBClusterID         string
-// 	VpcID               string
-// 	RDSDatabase         *RDSDatabase
-// 	Installation        *model.Installation
-// 	ClusterInstallation *model.ClusterInstallation
-// 	MockedStore         *modelmock.InstallationDatabaseStoreInterface
-// 	RDSTestSuite        *RDSTestSuite
-// }
+// Acceptance test for provisioning a RDS database.
+func (a *AWSTestSuite) TestProvisionRDS() {
+	a.SetDescribeVpcsExpectations(a.ClusterA.ID).Return(&ec2.DescribeVpcsOutput{Vpcs: []*ec2.Vpc{&ec2.Vpc{VpcId: &a.VPCa}}}, nil).Once()
+	a.SetGetSecretValueExpectations(a.InstallationA.ID).Return(&secretsmanager.GetSecretValueOutput{SecretString: &a.SecretString}, nil).Once()
+	a.SetDescribeDBClustersNotFoundExpectation().Once()
+	a.SetDescribeSecurityGroupsExpectation().Once()
+	a.SetDescribeDBSubnetGroupsExpectation(a.VPCa).Once()
+	a.SetCreateDBClusterExpectation(a.InstallationA.ID).Return(nil, nil).Once()
 
-// func NewDatabaseTestSuite() *DatabaseTestSuite {
-// 	rdsTestSuite := NewRDSTestSuite()
-// 	return &DatabaseTestSuite{
-// 		VpcID:        rdsTestSuite.VPCID,
-// 		SecretString: RDSSecretString,
-// 		RDSSecretID:  RDSSecretName(CloudID(rdsTestSuite.InstallationID)),
-// 		DBClusterID:  CloudID(rdsTestSuite.InstallationID),
-// 		Installation: &model.Installation{
-// 			ID: rdsTestSuite.InstallationID,
-// 		},
-// 		ClusterInstallation: &model.ClusterInstallation{
-// 			ID:             rdsTestSuite.ClusterInstallationID,
-// 			ClusterID:      rdsTestSuite.ClusterID,
-// 			InstallationID: rdsTestSuite.ClusterInstallationID,
-// 		},
-// 		RDSTestSuite: rdsTestSuite,
-// 	}
-// }
+	a.Mocks.LOG.WithFieldArgs("security-group-ids", a.GroupID).Once()
+	a.Mocks.LOG.WithFieldString("db-subnet-group-name", SubnetGroupName(a.VPCa)).Once()
+	a.Mocks.LOG.WithFieldString("db-cluster-name", CloudID(a.InstallationA.ID)).Once()
+	a.Mocks.LOG.WithFieldString("secret-name", RDSSecretName(CloudID(a.InstallationA.ID))).Once()
+	a.Mocks.LOG.WithFieldString("db-cluster-name", CloudID(a.InstallationA.ID)).Once()
 
-// func (d *DatabaseTestSuite) SetupTest() {
-// 	d.RDSTestSuite.MockedClient = NewMockedClient()
-// 	d.RDSTestSuite.MockedFilledLogger = testlib.NewMockedFieldLogger()
-// 	d.RDSDatabase = NewRDSDatabase(d.Installation, d.ClusterInstallation, d.RDSTestSuite.MockedClient.client)
-// 	d.MockedStore = &modelmock.InstallationDatabaseStoreInterface{}
-// }
+	a.SetDescribeDBInstancesNotFoundExpectation(a.InstallationA.ID).Once()
+	a.SetCreateDBInstanceExpectation(a.InstallationA.ID).Return(nil, nil).Once()
+	a.Mocks.LOG.InfofString("Provisioning AWS RDS master instance with name %s", RDSMasterInstanceID(a.InstallationA.ID)).Once()
+	a.Mocks.LOG.WithFieldString("db-instance-name", RDSMasterInstanceID(a.InstallationA.ID)).Once()
 
-// // Acceptance test for provisioning a RDS database.
-// func (d *DatabaseTestSuite) TestProvisionRDS() {
-// 	d.SetDescribeVpcsExpectations().Return(&ec2.DescribeVpcsOutput{Vpcs: []*ec2.Vpc{&ec2.Vpc{VpcId: &d.VpcID}}}, nil).Once()
-// 	d.SetGetSecretValueExpectations().Return(&secretsmanager.GetSecretValueOutput{SecretString: &d.SecretString}, nil).Once()
-// 	d.RDSTestSuite.SetDescribeDBClustersNotFoundExpectation().Once()
-// 	d.RDSTestSuite.SetDescribeSecurityGroupsExpectation().Once()
-// 	d.RDSTestSuite.SetDescribeDBSubnetGroupsExpectation().Once()
-// 	d.RDSTestSuite.SetCreateDBClusterExpectation().Return(nil, nil).Once()
-// 	d.RDSTestSuite.MockedFilledLogger.WithFieldArgs("security-group-ids", "id-0c889fcf75ed9cfbb").Once()
-// 	d.RDSTestSuite.MockedFilledLogger.WithFieldString("db-subnet-group-name", "mattermost-provisioner-db-vpc-0c889fcf75ed9cfbb").Once()
-// 	d.RDSTestSuite.MockedFilledLogger.WithFieldString("secret-name", "cloud-953qdo7ce7ndjbz3gemrdfff4h-rds").Once()
-// 	d.RDSTestSuite.MockedFilledLogger.WithFieldString("db-cluster-name", "cloud-953qdo7ce7ndjbz3gemrdfff4h").Once()
-// 	d.RDSTestSuite.SetDescribeDBInstancesNotFoundExpectation().Once()
-// 	d.RDSTestSuite.SetCreateDBInstanceExpectation().Return(nil, nil).Once()
-// 	d.RDSTestSuite.MockedFilledLogger.InfofString("Provisioning AWS RDS master instance with name %s", "cloud-953qdo7ce7ndjbz3gemrdfff4h-master").Once()
-// 	d.RDSTestSuite.MockedFilledLogger.WithFieldString("db-instance-name", "cloud-953qdo7ce7ndjbz3gemrdfff4h-master").Once()
+	err := NewRDSDatabase(a.InstallationA, a.ClusterInstallationA, a.Mocks.AWS).Provision(a.Mocks.LOG.Logger)
 
-// 	err := d.RDSDatabase.Provision(d.RDSTestSuite.MockedFilledLogger.Logger)
+	a.Assert().NoError(err)
+}
 
-// 	d.Assert().NoError(err)
-// }
+func (a *AWSTestSuite) TestProvisionRDSErrorVPCNotClusterIDProvided() {
+	err := NewRDSDatabase(a.InstallationA, nil, a.Mocks.AWS).Provision(a.Mocks.LOG.Logger)
+	a.Assert().Error(err)
+	a.Assert().Equal("unable to provisioning RDS database - cluster installation id not provided", err.Error())
+}
 
-// func (d *DatabaseTestSuite) TestProvisionRDSErrorVPCNotClusterIDProvided() {
-// 	err := NewRDSDatabase(d.Installation, nil, d.RDSTestSuite.MockedClient.client).Provision(d.RDSTestSuite.MockedFilledLogger.Logger)
-// 	d.Assert().Error(err)
-// 	d.Assert().Contains(err.Error(), "unable to provisioning RDS database - cluster installation id not provided")
-// }
+func (a *AWSTestSuite) TestProvisionRDSErrorVPCNotAvailable() {
+	a.SetDescribeVpcsExpectations(a.ClusterA.ID).Return(&ec2.DescribeVpcsOutput{Vpcs: []*ec2.Vpc{}}, nil).Once()
 
-// func (d *DatabaseTestSuite) TestProvisionRDSErrorVPCNotAvailable() {
-// 	d.SetDescribeVpcsExpectations().Return(&ec2.DescribeVpcsOutput{}, nil)
+	err := NewRDSDatabase(a.InstallationA, a.ClusterInstallationA, a.Mocks.AWS).Provision(a.Mocks.LOG.Logger)
 
-// 	err := d.RDSDatabase.Provision(d.RDSTestSuite.MockedFilledLogger.Logger)
+	a.Assert().Error(err)
+	a.Assert().Equal("expected 1 VPC for cluster id000000000000000000000000a, but got 0", err.Error())
+}
 
-// 	d.Assert().Error(err)
-// 	d.Assert().Contains(err.Error(), "expected 1 VPC for cluster asd876a93nkafgm34maldfl20s, but got 0")
-// }
+func (a *AWSTestSuite) TestProvisionRDSTooManyVPCs() {
+	a.SetDescribeVpcsExpectations(a.ClusterA.ID).Return(&ec2.DescribeVpcsOutput{
+		Vpcs: []*ec2.Vpc{&ec2.Vpc{VpcId: &a.VPCa}, &ec2.Vpc{VpcId: &a.VPCb}},
+	}, nil).Once()
 
-// func (d *DatabaseTestSuite) TestProvisionRDSTooManyVPCs() {
-// 	d.SetDescribeVpcsExpectations().Return(&ec2.DescribeVpcsOutput{
-// 		Vpcs: []*ec2.Vpc{&ec2.Vpc{VpcId: &d.VpcID}, &ec2.Vpc{VpcId: aws.String("vpc-123")}},
-// 	}, nil).Once()
+	err := NewRDSDatabase(a.InstallationA, a.ClusterInstallationA, a.Mocks.AWS).Provision(a.Mocks.LOG.Logger)
 
-// 	err := d.RDSDatabase.Provision(d.RDSTestSuite.MockedFilledLogger.Logger)
+	a.Assert().Error(err)
+	a.Assert().Equal("expected 1 VPC for cluster id000000000000000000000000a, but got 2", err.Error())
+}
 
-// 	d.Assert().Error(err)
-// 	d.Assert().Contains(err.Error(), "expected 1 VPC for cluster asd876a93nkafgm34maldfl20s, but got 2")
-// }
+func (a *AWSTestSuite) TestProvisionRDSNotEnoughVPCs() {
+	a.SetDescribeVpcsExpectations(a.ClusterA.ID).Return(&ec2.DescribeVpcsOutput{Vpcs: []*ec2.Vpc{}}, nil).Once()
+	a.Mocks.LOG.WithFieldString("secret-name", RDSSecretName(CloudID(a.InstallationA.ID))).Once()
 
-// func (d *DatabaseTestSuite) TestProvisionRDSNotEnoughVPCs() {
-// 	d.SetDescribeVpcsExpectations().Return(&ec2.DescribeVpcsOutput{Vpcs: []*ec2.Vpc{}}, nil).Once()
+	err := NewRDSDatabase(a.InstallationA, a.ClusterInstallationA, a.Mocks.AWS).Provision(a.Mocks.LOG.Logger)
 
-// 	err := d.RDSDatabase.Provision(d.RDSTestSuite.MockedFilledLogger.Logger)
+	a.Assert().Error(err)
+	a.Assert().Equal("expected 1 VPC for cluster id000000000000000000000000a, but got 0", err.Error())
+}
 
-// 	d.Assert().Error(err)
-// 	d.Assert().Contains(err.Error(), "expected 1 VPC for cluster asd876a93nkafgm34maldfl20s, but got 0")
-// }
+func (a *AWSTestSuite) TestProvisionRDSErrorMasterUsername() {
+	a.SetDescribeVpcsExpectations(a.ClusterA.ID).Return(&ec2.DescribeVpcsOutput{Vpcs: []*ec2.Vpc{&ec2.Vpc{VpcId: &a.VPCa}}}, nil).Once()
+	a.SetGetSecretValueExpectations(a.InstallationA.ID).Return(&secretsmanager.GetSecretValueOutput{
+		SecretString: &a.SecretStringUserErr,
+	}, nil).Once()
+	a.Mocks.LOG.WithFieldString("secret-name", RDSSecretName(CloudID(a.InstallationA.ID))).Once()
 
-// func (d *DatabaseTestSuite) TestProvisionRDSErrorMasterUsername() {
-// 	d.SetDescribeVpcsExpectations().Return(&ec2.DescribeVpcsOutput{Vpcs: []*ec2.Vpc{&ec2.Vpc{VpcId: &d.VpcID}}}, nil).Once()
-// 	d.SetGetSecretValueExpectations().Return(&secretsmanager.GetSecretValueOutput{
-// 		SecretString: aws.String("{\"username\":\"mmcloud\",\"MasterPassword\":\"oX5rWueZt6ynsijE9PHpUO0VUWSwWSxqXCaZw1dC\"}"),
-// 	}, nil).Once()
-// 	d.RDSTestSuite.MockedFilledLogger.WithFieldString("secret-name", "cloud-953qdo7ce7ndjbz3gemrdfff4h-rds").Once()
+	err := NewRDSDatabase(a.InstallationA, a.ClusterInstallationA, a.Mocks.AWS).Provision(a.Mocks.LOG.Logger)
 
-// 	err := d.RDSDatabase.Provision(d.RDSTestSuite.MockedFilledLogger.Logger)
+	a.Assert().Error(err)
+	a.Assert().Equal("RDS master username value is empty", err.Error())
+}
 
-// 	d.Assert().Error(err)
-// 	d.Assert().Equal("RDS master username value is empty", err.Error())
-// }
-// func (d *DatabaseTestSuite) TestProvisionRDSErrorMasterPassword() {
-// 	d.SetDescribeVpcsExpectations().Return(&ec2.DescribeVpcsOutput{Vpcs: []*ec2.Vpc{&ec2.Vpc{VpcId: &d.VpcID}}}, nil).Once()
-// 	d.SetGetSecretValueExpectations().Return(&secretsmanager.GetSecretValueOutput{
-// 		SecretString: aws.String("{\"MasterUsername\":\"mmcloud\",\"password\":\"oX5rWueZt6ynsijE9PHpUO0VUWSwWSxqXCaZw1dC\"}"),
-// 	}, nil).Once()
-// 	d.RDSTestSuite.MockedFilledLogger.WithFieldString("secret-name", "cloud-953qdo7ce7ndjbz3gemrdfff4h-rds").Once()
+func (a *AWSTestSuite) TestProvisionRDSErrorPassword() {
+	a.SetDescribeVpcsExpectations(a.ClusterA.ID).Return(&ec2.DescribeVpcsOutput{Vpcs: []*ec2.Vpc{&ec2.Vpc{VpcId: &a.VPCa}}}, nil).Once()
+	a.SetGetSecretValueExpectations(a.InstallationA.ID).Return(&secretsmanager.GetSecretValueOutput{
+		SecretString: &a.SecretStringPassErr,
+	}, nil).Once()
+	a.Mocks.LOG.WithFieldString("secret-name", RDSSecretName(CloudID(a.InstallationA.ID))).Once()
 
-// 	err := d.RDSDatabase.Provision(d.RDSTestSuite.MockedFilledLogger.Logger)
+	err := NewRDSDatabase(a.InstallationA, a.ClusterInstallationA, a.Mocks.AWS).Provision(a.Mocks.LOG.Logger)
 
-// 	d.Assert().Error(err)
-// 	d.Assert().Equal("RDS master password value is empty", err.Error())
-// }
+	a.Assert().Error(err)
+	a.Assert().Equal("RDS master password value is empty", err.Error())
+}
 
-// func TestDatabaseSuite(t *testing.T) {
-// 	suite.Run(t, NewDatabaseTestSuite())
-// }
+// Helpers
 
-// // Helpers
+func (a *AWSTestSuite) SetDescribeVpcsExpectations(clusterID string) *mock.Call {
+	return a.Mocks.API.EC2.On("DescribeVpcs", mock.MatchedBy(
+		func(input *ec2.DescribeVpcsInput) bool {
+			return *input.Filters[0].Name == VpcClusterIDTagKey &&
+				*input.Filters[1].Name == VpcAvailableTagKey &&
+				*input.Filters[0].Values[0] == clusterID &&
+				*input.Filters[1].Values[0] == VpcAvailableTagValueFalse
+		}))
+}
 
-// func (d *DatabaseTestSuite) SetDescribeVpcsExpectations() *mock.Call {
-// 	return d.RDSTestSuite.MockedClient.api.EC2.On("DescribeVpcs", mock.MatchedBy(
-// 		func(input *ec2.DescribeVpcsInput) bool {
-// 			return *input.Filters[0].Name == VpcClusterIDTagKey &&
-// 				*input.Filters[1].Name == VpcAvailableTagKey &&
-// 				*input.Filters[0].Values[0] == d.ClusterInstallation.ClusterID &&
-// 				*input.Filters[1].Values[0] == VpcAvailableTagValueFalse
-// 		}))
-// }
-
-// func (d *DatabaseTestSuite) SetGetSecretValueExpectations() *mock.Call {
-// 	return d.RDSTestSuite.MockedClient.api.SecretsManager.On("GetSecretValue", mock.MatchedBy(
-// 		func(input *secretsmanager.GetSecretValueInput) bool {
-// 			return *input.SecretId == d.RDSSecretID
-// 		}))
-// }
-
-// // WARNING:
-// // This test is meant to exercise the provisioning and teardown of an AWS RDS
-// // database in a real AWS account. Only set the test env vars below if you wish
-// // to test this process with real AWS resources.
-
-// // func TestDatabaseProvision(t *testing.T) {
-// // 	id := os.Getenv("SUPER_AWS_DATABASE_TEST")
-// // 	if id == "" {
-// // 		return
-// // 	}
-
-// // 	logger := logrus.New()
-// // 	sess, err := CreateSession(logger, SessionConfig{
-// // 		Region:  DefaultAWSRegion,
-// // 		Retries: 3,
-// // 	})
-// // 	require.NoError(t, err)
-
-// // 	database := NewRDSDatabase(&model.Installation{ID: id}, NewClient(sess))
-// // 	require.NoError(t, database.Provision(nil, logger))
-// // }
-
-// // func TestDatabaseTeardown(t *testing.T) {
-// // 	id := os.Getenv("SUPER_AWS_DATABASE_TEST")
-// // 	if id == "" {
-// // 		return
-// // 	}
-
-// // 	logger := logrus.New()
-// // 	sess, err := CreateSession(logger, SessionConfig{
-// // 		Region:  DefaultAWSRegion,
-// // 		Retries: 3,
-// // 	})
-// // 	require.NoError(t, err)
-
-// // 	database := NewRDSDatabase(id, NewClient(sess))
-// // 	require.NoError(t, database.Teardown(false, logger))
-// // }
+func (a *AWSTestSuite) SetGetSecretValueExpectations(installationID string) *mock.Call {
+	return a.Mocks.API.SecretsManager.On("GetSecretValue", mock.MatchedBy(
+		func(input *secretsmanager.GetSecretValueInput) bool {
+			return *input.SecretId == RDSSecretName(CloudID(installationID))
+		}))
+}
