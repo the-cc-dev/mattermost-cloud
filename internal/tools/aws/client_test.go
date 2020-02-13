@@ -26,8 +26,9 @@ func (d *ClientTestSuite) TestNewClient() {
 	d.Assert().NotNil(client.RDS)
 	d.Assert().NotNil(client.S3)
 	d.Assert().NotNil(client.IAM)
-	d.Assert().NotNil(client.Route53)
 	d.Assert().NotNil(client.ACM)
+	d.Assert().NotNil(client.SecretsManager)
+	d.Assert().NotNil(client.Route53)
 }
 
 func TestClientSuite(t *testing.T) {
@@ -46,12 +47,13 @@ func NewMockedClient() *MockedClient {
 		api: aws.NewMocks(),
 	}
 	mockedClient.client = &Client{
-		RDS:     mockedClient.api.RDS,
-		EC2:     mockedClient.api.EC2,
-		IAM:     mockedClient.api.IAM,
-		ACM:     mockedClient.api.ACM,
-		S3:      mockedClient.api.S3,
-		Route53: mockedClient.api.Route53,
+		RDS:            mockedClient.api.RDS,
+		EC2:            mockedClient.api.EC2,
+		IAM:            mockedClient.api.IAM,
+		ACM:            mockedClient.api.ACM,
+		S3:             mockedClient.api.S3,
+		Route53:        mockedClient.api.Route53,
+		SecretsManager: mockedClient.api.SecretsManager,
 	}
 
 	return mockedClient

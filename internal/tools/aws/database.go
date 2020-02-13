@@ -124,14 +124,19 @@ func (d *RDSDatabase) Teardown(keepData bool, logger log.FieldLogger) error {
 // GenerateDatabaseSpecAndSecret creates the k8s database spec and secret for
 // accessing the RDS database.
 func (d *RDSDatabase) GenerateDatabaseSpecAndSecret(logger log.FieldLogger) (*mmv1alpha1.Database, *corev1.Secret, error) {
-	rdsSecret, err := secretsManagerGetRDSSecret(d.dbClusterID)
+	rdsSecret, err := d.awsClient.secretsManagerGetRDSSecret(d.dbClusterID)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	dbCluster, err := rdsGetDBCluster(d.dbClusterID, logger)
+	out, err := d.awsClient.RDS.DescribeDBClusters(&rds.DescribeDBClustersInput{
+		DBClusterIdentifier: aws.String(d.dbClusterID),
+	})
 	if err != nil {
 		return nil, nil, err
+	}
+	if len(out.DBClusters) != 1 {
+		return nil, nil, fmt.Errorf("expected 1 DB cluster, but got %d", len(out.DBClusters))
 	}
 
 	databaseSecret := &corev1.Secret{
@@ -139,7 +144,7 @@ func (d *RDSDatabase) GenerateDatabaseSpecAndSecret(logger log.FieldLogger) (*mm
 			Name: d.dbSecretName,
 		},
 		StringData: map[string]string{
-			"DB_CONNECTION_STRING": fmt.Sprintf(connStringTemplate, rdsSecret.MasterUsername, rdsSecret.MasterPassword, *dbCluster.Endpoint),
+			"DB_CONNECTION_STRING": fmt.Sprintf(connStringTemplate, rdsSecret.MasterUsername, rdsSecret.MasterPassword, *out.DBClusters[0].Endpoint),
 		},
 	}
 

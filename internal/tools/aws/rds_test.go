@@ -14,19 +14,41 @@ import (
 
 type RDSTestSuite struct {
 	suite.Suite
-	MockedClient        *MockedClient
-	MockedFilledLogger  *testlib.MockedFieldLogger
-	VPCID               string
-	DBClusterID         string
-	DBClusterInstance   string
-	DBUser              string
-	DBPassword          string
-	GroupID             string
-	DBSubnetGroupName   string
-	DBPgCluster         string
-	DBPg                string
-	DBName              string
-	DBAvailabilityZones []string
+	MockedClient          *MockedClient
+	MockedFilledLogger    *testlib.MockedFieldLogger
+	ClusterID             string
+	ClusterInstallationID string
+	InstallationID        string
+	DBClusterID           string
+	DBClusterInstance     string
+	DBUser                string
+	DBPassword            string
+	GroupID               string
+	DBSubnetGroupName     string
+	DBPgCluster           string
+	DBPg                  string
+	VPCID                 string
+	DBName                string
+	DBAvailabilityZones   []string
+}
+
+func NewRDSTestSuite() *RDSTestSuite {
+	return &RDSTestSuite{
+		VPCID:                 "vpc-0c889fcf75ed9cfbb",
+		ClusterID:             "asd876a93nkafgm34maldfl20s",
+		InstallationID:        "953qdo7ce7ndjbz3gemrdfff4h",
+		ClusterInstallationID: "ajsd83aksk343ksdk34377sdfs",
+		DBClusterID:           "cloud-953qdo7ce7ndjbz3gemrdfff4h",
+		DBClusterInstance:     "cloud-953qdo7ce7ndjbz3gemrdfff4h-master",
+		DBUser:                "admin",
+		DBPassword:            "secret",
+		GroupID:               "id-0c889fcf75ed9cfbb",
+		DBSubnetGroupName:     "mattermost-provisioner-db-vpc-0c889fcf75ed9cfbb",
+		DBPgCluster:           "mattermost-provisioner-rds-cluster-pg",
+		DBPg:                  "mattermost-provisioner-rds-pg",
+		DBName:                "mattermost",
+		DBAvailabilityZones:   []string{"us-east-1a", "us-east-1b", "us-east-1c"},
+	}
 }
 
 func (d *RDSTestSuite) SetupTest() {
@@ -140,19 +162,7 @@ func (d *RDSTestSuite) TestRDSEnsureDBClusterInstanceCreateError() {
 }
 
 func TestRDSSuite(t *testing.T) {
-	suite.Run(t, &RDSTestSuite{
-		VPCID:               "vpc-0c889fcf75ed9cfbb",
-		DBClusterID:         "cloud-953qdo7ce7ndjbz3gemrdfff4h",
-		DBClusterInstance:   "cloud-953qdo7ce7ndjbz3gemrdfff4h-master",
-		DBUser:              "admin",
-		DBPassword:          "secret",
-		GroupID:             "id-0c889fcf75ed9cfbb",
-		DBSubnetGroupName:   "mattermost-provisioner-db-vpc-0c889fcf75ed9cfbb",
-		DBPgCluster:         "mattermost-provisioner-rds-cluster-pg",
-		DBPg:                "mattermost-provisioner-rds-pg",
-		DBName:              "mattermost",
-		DBAvailabilityZones: []string{"us-east-1a", "us-east-1b", "us-east-1c"},
-	})
+	suite.Run(t, NewRDSTestSuite())
 }
 
 // Helpers

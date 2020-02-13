@@ -17,7 +17,7 @@ const (
 
 // Database is the interface for managing Mattermost databases.
 type Database interface {
-	Provision(store InstallationDatabaseStoreInterface, logger log.FieldLogger) error
+	Provision(logger log.FieldLogger) error
 	Snapshot(logger log.FieldLogger) error
 	Teardown(keepData bool, logger log.FieldLogger) error
 	GenerateDatabaseSpecAndSecret(logger log.FieldLogger) (*mmv1alpha1.Database, *corev1.Secret, error)
@@ -38,7 +38,7 @@ func NewMysqlOperatorDatabase() *MysqlOperatorDatabase {
 }
 
 // Provision completes all the steps necessary to provision a MySQL operator database.
-func (d *MysqlOperatorDatabase) Provision(store InstallationDatabaseStoreInterface, logger log.FieldLogger) error {
+func (d *MysqlOperatorDatabase) Provision(logger log.FieldLogger) error {
 	logger.Info("MySQL operator database requires no pre-provisioning; skipping...")
 
 	return nil
@@ -83,7 +83,7 @@ func IsSupportedDatabase(database string) bool {
 type NotSupportedDatabase struct{}
 
 // Provision returns not supported database error.
-func (d *NotSupportedDatabase) Provision(store InstallationDatabaseStoreInterface, logger log.FieldLogger) error {
+func (d *NotSupportedDatabase) Provision(logger log.FieldLogger) error {
 	return errors.New("attempted to use an unsupported database type")
 }
 

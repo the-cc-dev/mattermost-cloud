@@ -54,7 +54,7 @@ func (f *S3Filestore) Teardown(keepData bool, logger log.FieldLogger) error {
 // GenerateFilestoreSpecAndSecret creates the k8s filestore spec and secret for
 // accessing the S3 bucket.
 func (f *S3Filestore) GenerateFilestoreSpecAndSecret(logger log.FieldLogger) (*mmv1alpha1.Minio, *corev1.Secret, error) {
-	iamAccessKey, err := secretsManagerGetIAMAccessKey(f.bucketID)
+	iamAccessKey, err := f.awsClient.secretsManagerGetIAMAccessKey(f.bucketID)
 	if err != nil {
 		return nil, nil, err
 	}

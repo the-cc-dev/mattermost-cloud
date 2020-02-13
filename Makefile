@@ -58,22 +58,25 @@ dist:	build
 mocks:
 	@env GO111MODULE=off $(GO) get -u github.com/vektra/mockery/.../
 	
-	# vendor
+	# AWS
 	@env GO111MODULE=off $(GO) get -u github.com/aws/aws-sdk-go/...
-	$(GOPATH)/bin/mockery -dir $(AWS_SRC_PATH)/ec2/ec2iface -all -output ./internal/tools/aws/mocks
-	$(GOPATH)/bin/mockery -dir $(AWS_SRC_PATH)/rds/rdsiface -all -output ./internal/tools/aws/mocks
-	$(GOPATH)/bin/mockery -dir $(AWS_SRC_PATH)/s3/s3iface -all -output ./internal/tools/aws/mocks
-	$(GOPATH)/bin/mockery -dir $(AWS_SRC_PATH)/acm/acmiface -all -output ./internal/tools/aws/mocks
-	$(GOPATH)/bin/mockery -dir $(AWS_SRC_PATH)/iam/iamiface -all -output ./internal/tools/aws/mocks
-	$(GOPATH)/bin/mockery -dir $(AWS_SRC_PATH)/route53/route53iface -all -output ./internal/tools/aws/mocks
+	# $(GOPATH)/bin/mockery -dir $(AWS_SRC_PATH)/ec2/ec2iface -all -output ./internal/tools/aws/mocks
+	# $(GOPATH)/bin/mockery -dir $(AWS_SRC_PATH)/rds/rdsiface -all -output ./internal/tools/aws/mocks
+	# $(GOPATH)/bin/mockery -dir $(AWS_SRC_PATH)/s3/s3iface -all -output ./internal/tools/aws/mocks
+	# $(GOPATH)/bin/mockery -dir $(AWS_SRC_PATH)/acm/acmiface -all -output ./internal/tools/aws/mocks
+	# $(GOPATH)/bin/mockery -dir $(AWS_SRC_PATH)/iam/iamiface -all -output ./internal/tools/aws/mocks
+	# $(GOPATH)/bin/mockery -dir $(AWS_SRC_PATH)/route53/route53iface -all -output ./internal/tools/aws/mocks
+	$(GOPATH)/bin/mockery -dir $(AWS_SRC_PATH)/secretsmanager/secretsmanageriface -all -output ./internal/tools/aws/mocks
 	
-	# internal
+	# INTERNAL
 	$(GOPATH)/bin/mockery -dir ./internal/provisioner -all -output ./internal/provisioner/mocks
 	$(GOPATH)/bin/mockery -dir ./internal/supervisor -all -output ./internal/supervisor/mocks
 	$(GOPATH)/bin/mockery -dir ./internal/testlib -all -output ./internal/testlib/mocks
 	$(GOPATH)/bin/mockery -dir ./internal/webhook -all -output ./internal/webhook/mocks
 	$(GOPATH)/bin/mockery -dir ./internal/store -all -output ./internal/store/mocks
 	$(GOPATH)/bin/mockery -dir ./internal/api -all -output ./internal/api/mocks
+	
+	# MODEL
 	$(GOPATH)/bin/mockery -dir ./model -all -output ./model/mocks
 
 .PHONY: build

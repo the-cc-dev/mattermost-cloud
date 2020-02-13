@@ -5,7 +5,6 @@ import (
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
-	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/ec2"
 	"github.com/aws/aws-sdk-go/service/rds"
 	"github.com/mattermost/mattermost-cloud/model"
@@ -146,25 +145,6 @@ func (a *Client) rdsEnsureDBClusterInstanceCreated(awsID, instanceName string, l
 	logger.WithField("db-instance-name", instanceName).Debug("AWS DB instance created")
 
 	return nil
-}
-
-func rdsGetDBCluster(awsID string, logger log.FieldLogger) (*rds.DBCluster, error) {
-	svc := rds.New(session.New(), &aws.Config{
-		Region: aws.String(DefaultAWSRegion),
-	})
-
-	result, err := svc.DescribeDBClusters(&rds.DescribeDBClustersInput{
-		DBClusterIdentifier: aws.String(awsID),
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	if len(result.DBClusters) != 1 {
-		return nil, fmt.Errorf("expected 1 DB cluster, but got %d", len(result.DBClusters))
-	}
-
-	return result.DBClusters[0], nil
 }
 
 func (a *Client) rdsEnsureDBClusterDeleted(awsID string, logger log.FieldLogger) error {
