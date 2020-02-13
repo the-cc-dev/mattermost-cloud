@@ -17,7 +17,27 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3/s3iface"
 	"github.com/aws/aws-sdk-go/service/secretsmanager"
 	"github.com/aws/aws-sdk-go/service/secretsmanager/secretsmanageriface"
+	log "github.com/sirupsen/logrus"
 )
+
+// AWS interface for use by other packages.
+type AWS interface {
+	GetCertificateSummaryByTag(key, value string) (*acm.CertificateSummary, error)
+
+	GetAndClaimVpcResources(clusterID, owner string, logger log.FieldLogger) (ClusterResources, error)
+	ReleaseVpc(clusterID string, logger log.FieldLogger) error
+
+	GetPrivateZoneDomainName(logger log.FieldLogger) (string, error)
+	CreatePrivateCNAME(dnsName string, dnsEndpoints []string, logger log.FieldLogger) error
+	CreatePublicCNAME(dnsName string, dnsEndpoints []string, logger log.FieldLogger) error
+
+	DeletePrivateCNAME(dnsName string, logger log.FieldLogger) error
+	DeletePublicCNAME(dnsName string, logger log.FieldLogger) error
+
+	TagResource(resourceID, key, value string, logger log.FieldLogger) error
+	UntagResource(resourceID, key, value string, logger log.FieldLogger) error
+	IsValidAMI(AMIImage string) (bool, error)
+}
 
 // Client is a client for interacting with AWS resources.
 type Client struct {

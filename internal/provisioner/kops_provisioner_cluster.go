@@ -28,17 +28,15 @@ type KopsProvisioner struct {
 	s3StateStore            string
 	privateSubnetIds        string
 	publicSubnetIds         string
-	privateDNS              string
 	owner                   string
 	awsClient               *aws.Client
 	logger                  log.FieldLogger
 }
 
 // NewKopsProvisioner creates a new KopsProvisioner.
-func NewKopsProvisioner(s3StateStore, privateDNS, owner string, useExistingAWSResources bool, logger log.FieldLogger, awsClient *aws.Client) *KopsProvisioner {
+func NewKopsProvisioner(s3StateStore, owner string, useExistingAWSResources bool, logger log.FieldLogger, awsClient *aws.Client) *KopsProvisioner {
 	return &KopsProvisioner{
 		s3StateStore:            s3StateStore,
-		privateDNS:              privateDNS,
 		useExistingAWSResources: useExistingAWSResources,
 		logger:                  logger,
 		owner:                   owner,
@@ -171,6 +169,18 @@ func (provisioner *KopsProvisioner) CreateCluster(cluster *model.Cluster) error 
 	}
 
 	logger.WithField("name", kopsMetadata.Name).Info("Successfully deployed kubernetes")
+
+	logger.WithField("name", kopsMetadata.Name).Info("Updating VolumeBindingMode in default storage class")
+	k8sClient, err := k8s.New(kops.GetKubeConfigPath(), logger)
+	if err != nil {
+		return err
+	}
+
+	_, err = k8sClient.UpdateStorageClassVolumeBindingMode("gp2")
+	if err != nil {
+		return err
+	}
+	logger.WithField("name", kopsMetadata.Name).Info("Successfully updated storage class")
 
 	ugh, err := newUtilityGroupHandle(kops, provisioner, cluster, provisioner.awsClient, logger)
 	if err != nil {

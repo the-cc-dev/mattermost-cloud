@@ -581,6 +581,26 @@ var migrations = []migration{
 		return nil
 	}},
 	{semver.MustParse("0.11.0"), semver.MustParse("0.12.0"), func(e execer) error {
+		// Add version columns for all of the utilities.
+		_, err := e.Exec(`
+				ALTER TABLE Cluster ADD COLUMN UtilityMetadata BYTEA NULL;
+		`)
+		if err != nil {
+			return err
+		}
+
+		return nil
+	}},
+	{semver.MustParse("0.12.0"), semver.MustParse("0.12.1"), func(e execer) error {
+		// Assign default values to UtilityMetadata if values do not
+		// exist, otherwise, keep existing values
+		_, err := e.Exec(`
+				UPDATE Cluster
+				SET UtilityMetadata = '{}' WHERE UtilityMetadata is NULL;
+		 `)
+		return err
+	}},
+	{semver.MustParse("0.12.1"), semver.MustParse("0.12.2"), func(e execer) error {
 		_, err := e.Exec(`
 			CREATE TABLE ClusterInstallationMigration (
 				ID TEXT PRIMARY KEY,

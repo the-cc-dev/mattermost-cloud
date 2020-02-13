@@ -142,6 +142,10 @@ type mockInstallationStore struct {
 // 	return nil
 // }
 
+// func (a *mockAWS) GetPrivateZoneDomainName(logger log.FieldLogger) (string, error) {
+// 	return "test.domain", nil
+// }
+
 // func (a *mockAWS) CreatePrivateCNAME(dnsName string, dnsEndpoints []string, logger log.FieldLogger) error {
 // 	return nil
 // }

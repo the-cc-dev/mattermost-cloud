@@ -38,9 +38,6 @@ func init() {
 	serverCmd.PersistentFlags().Bool("cluster-installation-supervisor", true, "Whether this server will run a cluster installation supervisor or not.")
 	serverCmd.PersistentFlags().Bool("cluster-installation-migration-supervisor", true, "Whether this server will run a cluster installation migration supervisor or not.")
 	serverCmd.PersistentFlags().String("state-store", "dev.cloud.mattermost.com", "The S3 bucket used to store cluster state.")
-	serverCmd.PersistentFlags().String("certificate-aws-arn", "", "The certificate ARN from AWS. Generated in the certificate manager console.")
-	serverCmd.PersistentFlags().String("route53-id", "", "The route 53 hosted zone ID used for mattermost DNS records.")
-	serverCmd.PersistentFlags().String("private-route53-id", "", "The route 53 hosted zone ID used for mattermost private DNS records.")
 	serverCmd.PersistentFlags().String("private-dns", "", "The DNS used for mattermost private Route53 records.")
 	serverCmd.PersistentFlags().Int("poll", 30, "The interval in seconds to poll for background work.")
 	serverCmd.PersistentFlags().Int("cluster-resource-threshold", 80, "The percent threshold where new installations won't be scheduled on a multi-tenant cluster.")
@@ -48,10 +45,6 @@ func init() {
 	serverCmd.PersistentFlags().Bool("keep-database-data", false, "Whether to preserve database data after installation deletion or not.")
 	serverCmd.PersistentFlags().Bool("keep-filestore-data", true, "Whether to preserve filestore data after installation deletion or not.")
 	serverCmd.PersistentFlags().Bool("debug", false, "Whether to output debug logs.")
-	serverCmd.MarkPersistentFlagRequired("private-dns")
-	serverCmd.Flags().MarkDeprecated("route53-id", "This flag is deprecated and it will have no effect")
-	serverCmd.Flags().MarkDeprecated("private-route53-id", "This flag is deprecated and it will have no effect")
-	serverCmd.Flags().MarkDeprecated("certificate-aws-arn", "This flag is deprecated and it will have no effect")
 }
 
 var serverCmd = &cobra.Command{
@@ -97,7 +90,6 @@ var serverCmd = &cobra.Command{
 			logger.Warn("Server will be running with no supervisors. Only API functionality will work.")
 		}
 
-		privateDNS, _ := command.Flags().GetString("private-dns")
 		s3StateStore, _ := command.Flags().GetString("state-store")
 		keepDatabaseData, _ := command.Flags().GetBool("keep-database-data")
 		keepFilestoreData, _ := command.Flags().GetBool("keep-filestore-data")
@@ -116,7 +108,6 @@ var serverCmd = &cobra.Command{
 			"store-version":                   currentVersion,
 			"state-store":                     s3StateStore,
 			"working-directory":               wd,
-			"private-dns":                     privateDNS,
 			"cluster-resource-threshold":      clusterResourceThreshold,
 			"use-existing-aws-resources":      useExistingResources,
 			"keep-database-data":              keepDatabaseData,
@@ -147,7 +138,6 @@ var serverCmd = &cobra.Command{
 		// Setup the provisioner for actually effecting changes to clusters.
 		kopsProvisioner := provisioner.NewKopsProvisioner(
 			s3StateStore,
-			privateDNS,
 			owner,
 			useExistingResources,
 			logger,
@@ -242,19 +232,9 @@ func deprecationWarnings(logger logrus.FieldLogger, cmd *cobra.Command) {
 		logger.Warn("[Deprecation] Instructions for doing this can be found in the README")
 	}
 
-	route53Flag, _ := cmd.Flags().GetString("route53-id")
-	if route53Flag != "" {
-		logger.Warn("[Deprecation] Flag route53-id is deprecated. Provisioner will use a resource tag to find route53-id in AWS.")
-	}
-
-	privateRoute53Flag, _ := cmd.Flags().GetString("private-route53-id")
-	if privateRoute53Flag != "" {
-		logger.Warn("[Deprecation] Flag private-route53-id is deprecated. Provisioner will use a resource tag to find private-route53-id in AWS.")
-	}
-
-	certificateARNFlag, _ := cmd.Flags().GetString("certificate-aws-arn")
-	if certificateARNFlag != "" {
-		logger.Warn("[Deprecation] Flag certificate-aws-arn is deprecated. Provisioner will use a resource tag to find certificate-aws-arn in AWS.")
+	privateDNS, _ := cmd.Flags().GetString("private-dns")
+	if privateDNS != "" {
+		logger.Warn("[Deprecation] The `private-dns` flag is deprecated and won't be used")
 	}
 }
 

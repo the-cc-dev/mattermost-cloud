@@ -49,6 +49,7 @@ func handleGetGroups(c *Context, w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
 	outputJSON(c, w, groups)
 }
 
@@ -99,6 +100,7 @@ func handleGetGroup(c *Context, w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
 	outputJSON(c, w, group)
 }
 
@@ -155,6 +157,23 @@ func handleDeleteGroup(c *Context, w http.ResponseWriter, r *http.Request) {
 		return
 	} else if group == nil {
 		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+
+	installations, err := c.Store.GetInstallations(&model.InstallationFilter{
+		GroupID:        groupID,
+		Page:           0,
+		PerPage:        model.AllPerPage,
+		IncludeDeleted: false,
+	})
+	if err != nil {
+		c.Logger.WithError(err).Error("failed to get installations in group")
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	if len(installations) != 0 {
+		c.Logger.Errorf("unable to delete group while it still has %d installation members", len(installations))
+		w.WriteHeader(http.StatusForbidden)
 		return
 	}
 

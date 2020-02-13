@@ -11,12 +11,13 @@ import (
 
 // CreateClusterRequest specifies the parameters for a new cluster.
 type CreateClusterRequest struct {
-	Provider           string   `json:"provider,omitempty"`
-	Version            string   `json:"version,omitempty"`
-	KopsAMI            string   `json:"kops-ami,omitempty"`
-	Size               string   `json:"size,omitempty"`
-	Zones              []string `json:"zones,omitempty"`
-	AllowInstallations bool     `json:"allow-installations,omitempty"`
+	Provider               string            `json:"provider,omitempty"`
+	Version                string            `json:"version,omitempty"`
+	KopsAMI                string            `json:"kops-ami,omitempty"`
+	Size                   string            `json:"size,omitempty"`
+	Zones                  []string          `json:"zones,omitempty"`
+	AllowInstallations     bool              `json:"allow-installations,omitempty"`
+	DesiredUtilityVersions map[string]string `json:"utility-versions,omitempty"`
 }
 
 // SetDefaults sets the default values for a cluster create request.
@@ -32,6 +33,18 @@ func (request *CreateClusterRequest) SetDefaults() {
 	}
 	if len(request.Zones) == 0 {
 		request.Zones = []string{"us-east-1a"}
+	}
+	if request.DesiredUtilityVersions == nil {
+		request.DesiredUtilityVersions = make(map[string]string)
+	}
+	if _, ok := request.DesiredUtilityVersions[PrometheusCanonicalName]; !ok {
+		request.DesiredUtilityVersions[PrometheusCanonicalName] = PrometheusDefaultVersion
+	}
+	if _, ok := request.DesiredUtilityVersions[NginxCanonicalName]; !ok {
+		request.DesiredUtilityVersions[NginxCanonicalName] = NginxDefaultVersion
+	}
+	if _, ok := request.DesiredUtilityVersions[FluentbitCanonicalName]; !ok {
+		request.DesiredUtilityVersions[FluentbitCanonicalName] = FluentbitDefaultVersion
 	}
 }
 
@@ -99,6 +112,20 @@ func NewUpdateClusterRequestFromReader(reader io.Reader) (*UpdateClusterRequest,
 	if err != nil && err != io.EOF {
 		return nil, errors.Wrap(err, "failed to decode update cluster request")
 	}
-
 	return &updateClusterRequest, nil
+}
+
+// ProvisionClusterRequest contains metadata related to changing the installed cluster state.
+type ProvisionClusterRequest struct {
+	DesiredUtilityVersions map[string]string `json:"utility-versions,omitempty"`
+}
+
+// NewProvisionClusterRequestFromReader will create an UpdateClusterRequest from an io.Reader with JSON data.
+func NewProvisionClusterRequestFromReader(reader io.Reader) (*ProvisionClusterRequest, error) {
+	var provisionClusterRequest ProvisionClusterRequest
+	err := json.NewDecoder(reader).Decode(&provisionClusterRequest)
+	if err != nil && err != io.EOF {
+		return nil, errors.Wrap(err, "failed to decode provision cluster request")
+	}
+	return &provisionClusterRequest, nil
 }
