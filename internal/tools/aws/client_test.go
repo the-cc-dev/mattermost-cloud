@@ -62,6 +62,12 @@ type AWSTestSuite struct {
 	RDSParamGroup        string
 	DBName               string
 	RDSAvailabilityZones []string
+
+	//Route53 fixtures
+	EndpointsA []string
+	EndpointsB []string
+	DNSNameA   string
+	DNSNameB   string
 }
 
 // This will take care of reseting mocks on every run. Any new mock library should be added here.
@@ -120,6 +126,11 @@ func NewAWSTestSuite() *AWSTestSuite {
 		SecretString:         "{\"MasterUsername\":\"mmcloud\",\"MasterPassword\":\"oX5rWueZt6ynsijE9PHpUO0VUWSwWSxqXCaZw1dC\"}",
 		SecretStringUserErr:  "{\"username\":\"mmcloud\",\"MasterPassword\":\"oX5rWueZt6ynsijE9PHpUO0VUWSwWSxqXCaZw1dC\"}",
 		SecretStringPassErr:  "{\"MasterUsername\":\"mmcloud\",\"password\":\"oX5rWueZt6ynsijE9PHpUO0VUWSwWSxqXCaZw1dC\"}",
+
+		EndpointsA: []string{"example1.mattermost.com", "example2.mattermost.com"},
+		EndpointsB: []string{"example1.mattermost.com"},
+		DNSNameA:   "mattermost.com",
+		DNSNameB:   "mattermost-cloud.com",
 	}
 }
 

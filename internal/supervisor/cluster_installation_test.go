@@ -15,6 +15,8 @@ type mockClusterInstallationStore struct {
 	UpdateClusterInstallationCalls int
 }
 
+// TODO(gsagula): fix these tests.
+
 // func (s *mockClusterInstallationStore) GetCluster(clusterID string) (*model.Cluster, error) {
 // 	return s.Cluster, nil
 // }

@@ -12,6 +12,8 @@ type mockInstallationStore struct {
 	UpdateInstallationCalls int
 }
 
+// TODO(gsagula): fix these tests.
+
 // func (s *mockInstallationStore) GetClusters(clusterFilter *model.ClusterFilter) ([]*model.Cluster, error) {
 // 	return nil, nil
 // }
