@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/mattermost/mattermost-cloud/internal/provisioner"
+	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
@@ -682,6 +683,7 @@ func (s *InstallationSupervisor) configureInstallationDNS(installation *model.In
 }
 
 func (s *InstallationSupervisor) updateInstallation(installation *model.Installation, instanceID string, logger log.FieldLogger) string {
+	prometheusTimer := s.initialUpdateTasks(logger)
 	// Before starting, we check the installation and group sequence numbers and
 	// sync them if they are not already. This is used to check if the group
 	// configuration has changed during the upgrade process or not.
@@ -796,7 +798,10 @@ func (s *InstallationSupervisor) updateInstallation(installation *model.Installa
 
 	logger.Info("Finished updating clusters installations")
 
-	return s.waitForUpdateStable(installation, instanceID, logger)
+	state := s.waitForUpdateStable(installation, instanceID, logger)
+	prometheusTimer.ObserveDuration()
+
+	return state
 }
 
 func (s *InstallationSupervisor) waitForUpdateStable(installation *model.Installation, instanceID string, logger log.FieldLogger) string {
@@ -1202,6 +1207,17 @@ func (s *InstallationSupervisor) deleteBackups(installation *model.Installation,
 func (s *InstallationSupervisor) finalCreationTasks(installation *model.Installation, logger log.FieldLogger) string {
 	logger.Info("Finished final creation tasks")
 	s.metrics.InstallationCreationDurationHist.Observe(elapsedTimeInSeconds(installation.CreateAt))
+	return model.InstallationStateStable
+}
+
+func (s *InstallationSupervisor) initialUpdateTasks(logger log.FieldLogger) *prometheus.Timer {
+	logger.Info("Started initial update tasks")
+	return prometheus.NewTimer(s.metrics.InstallationUpdateDurationHist)
+}
+
+func (s *InstallationSupervisor) finalUpdateTasks(timer *prometheus.Timer, logger log.FieldLogger) string {
+	logger.Info("Finished final update tasks")
+	timer.ObserveDuration()
 	return model.InstallationStateStable
 }
 
